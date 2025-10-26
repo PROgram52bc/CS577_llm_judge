@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -34,8 +35,9 @@ class ExperimentLoggerFactory:
         return logger
 
     def _log_path(self, experiment_name: str, run_name: Optional[str]) -> Path:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if run_name:
-            file_name = f"{experiment_name}_{run_name}.log"
+            file_name = f"{experiment_name}_{run_name}_{timestamp}.log"
         else:
-            file_name = f"{experiment_name}.log"
+            file_name = f"{experiment_name}_{timestamp}.log"
         return self.base_dir / file_name
