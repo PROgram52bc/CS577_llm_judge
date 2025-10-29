@@ -14,6 +14,11 @@ pip install -r requirements.txt
 
 The example experiment uses a mock LLM by default. Replace `MockLabelLLM` in `main.py` with an API or local model client to evaluate a real model.
 
+### Available LLM clients
+
+- `PurdueGenAIClient` connects to Purdue's GenAI OpenAI-compatible endpoint. Provide an API key via the constructor or the `PURDUE_GENAI_API_KEY` environment variable.
+- `OllamaClient` streams prompts to a locally hosted Ollama model (defaults to `deepseek-r1:8b`) using the `ollama` CLI.
+
 ```bash
 python main.py --sample-size 10 --log-dir logs
 ```

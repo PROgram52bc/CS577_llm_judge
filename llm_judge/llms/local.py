@@ -1,6 +1,7 @@
 """Local model integrations."""
 from __future__ import annotations
 
+import subprocess
 from typing import Any
 
 from transformers import pipeline
@@ -21,3 +22,29 @@ class LocalPipelineClient(LLMClient):
             if isinstance(output, dict) and "generated_text" in output:
                 return output["generated_text"]
         raise RuntimeError("Unexpected output from transformers pipeline")
+
+
+class OllamaClient(LLMClient):
+    """Interact with locally hosted Ollama models."""
+
+    def __init__(self, model_name: str = "deepseek-r1:8b", executable: str = "ollama") -> None:
+        self.model_name = model_name
+        self.executable = executable
+
+    def generate(self, prompt: str, **kwargs: Any) -> str:
+        timeout = kwargs.pop("timeout", None)
+        try:
+            completed = subprocess.run(
+                [self.executable, "run", self.model_name],
+                input=prompt,
+                text=True,
+                capture_output=True,
+                check=True,
+                timeout=timeout,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                f"Ollama command failed with return code {exc.returncode}: {exc.stderr.strip()}"
+            ) from exc
+
+        return completed.stdout.strip()
