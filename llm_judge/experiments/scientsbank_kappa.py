@@ -1,13 +1,14 @@
 """Experiment evaluating LLM grading on SciEntsBank."""
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from datasets.arrow_dataset import Dataset
-from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics import accuracy_score, cohen_kappa_score
+
+import pandas as pd
 
 from ..data.loaders import DatasetConfig, DatasetLoader
 from ..llms.base import LLMClient, PromptExample
@@ -33,8 +34,9 @@ class SciEntsBankKappaExperiment(Experiment):
         llm_client: LLMClient,
         logger_factory: ExperimentLoggerFactory,
         config: SciEntsBankExperimentConfig | None = None,
+        log_formats: Optional[Sequence[str]] = None,
     ) -> None:
-        super().__init__("scientsbank_kappa", logger_factory)
+        super().__init__("scientsbank_kappa", logger_factory, log_formats=log_formats)
         self.llm_client = llm_client
         self.config = config or SciEntsBankExperimentConfig()
 
@@ -63,12 +65,37 @@ class SciEntsBankKappaExperiment(Experiment):
                 "llm_response": response,
                 "predicted_label": predicted_label,
             }
-            self.log(json.dumps(log_record, ensure_ascii=False))
+            self.log(log_record)
             actual_labels.append(int(example["label"]))
             predicted_labels.append(predicted_label)
 
-        kappa = cohen_kappa_score(actual_labels, predicted_labels) if predicted_labels else float("nan")
-        return {"cohen_kappa": kappa}
+        metrics = self._compute_metrics(actual_labels, predicted_labels)
+        return metrics
+
+    def _compute_metrics(self, actual: List[int], predicted: List[int]) -> Dict[str, float]:
+        if not predicted:
+            return {
+                "cohen_kappa": float("nan"),
+                "accuracy": float("nan"),
+                "pearson": float("nan"),
+                "spearman": float("nan"),
+            }
+
+        accuracy = accuracy_score(actual, predicted)
+        kappa = cohen_kappa_score(actual, predicted)
+
+        gold_series = pd.Series(actual)
+        pred_series = pd.Series(predicted)
+        pearson = gold_series.corr(pred_series, method="pearson")
+        spearman = gold_series.corr(pred_series, method="spearman")
+
+        metrics = {
+            "cohen_kappa": float(kappa),
+            "accuracy": float(accuracy),
+            "pearson": float(pearson) if pearson is not None else float("nan"),
+            "spearman": float(spearman) if spearman is not None else float("nan"),
+        }
+        return metrics
 
     def _load_dataset(self) -> Iterable[Dict[str, str]]:
         loader = DatasetLoader(
