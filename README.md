@@ -1,6 +1,12 @@
 # CS577 LLM Judge
 
-This project provides a modular framework for evaluating large language models as judges. It supports experiments that query both cloud-hosted APIs and local transformer models, loads datasets from Hugging Face or CSV files, and records experiment logs.
+CS577 LLM Judge is an experimentation harness for evaluating the quality of large language models acting as automated graders. The current focus is the SciEntsBank short-answer dataset, but the framework is structured so that additional datasets, experiments, and model backends can be added with minimal changes.
+
+## Project status
+
+* **Experiment coverage:** The `SciEntsBankKappaExperiment` runs end-to-end grading evaluations and now reports Cohen's kappa, Pearson correlation, Spearman correlation, and simple accuracy against the gold labels.
+* **LLM backends:** The CLI can select among mock responses, OpenAI-compatible APIs, Purdue's RCAC GenAI endpoint, local Ollama installs, or Hugging Face `transformers` pipelines. API keys are sourced from environment variables by default.
+* **Logging:** Each run writes structured logs in both JSON Lines and CSV formats (configurable via the CLI). Every record includes the prompt context, the raw LLM response, and the derived label.
 
 ## Installation
 
@@ -10,12 +16,33 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Running the SciEntsBank experiment
-
-The example experiment uses a mock LLM by default. Replace `MockLabelLLM` in `main.py` with an API or local model client to evaluate a real model.
+Configure credentials by copying `env.example.sh` either inside or outside the repository, editing the secrets, and sourcing the file before running experiments:
 
 ```bash
-python main.py --sample-size 10 --log-dir logs
+cp env.example.sh env.local.sh
+# edit env.local.sh to fill in your keys
+source env.local.sh
 ```
 
-Logs are written to the specified directory and contain the full prompts, gold labels, and LLM responses for each datapoint. The command also prints the Cohen's kappa agreement score between the model predictions and ground-truth labels.
+## Running the SciEntsBank experiment
+
+The CLI defaults to the deterministic mock model which requires no external dependencies. Replace the backend to target a real model:
+
+```bash
+# Run 25 examples with the OpenAI backend and CSV+JSON logs
+python main.py \
+  --sample-size 25 \
+  --llm-backend openai \
+  --openai-model gpt-4o-mini
+```
+
+Key CLI options:
+
+| Option | Description |
+| --- | --- |
+| `--llm-backend {mock,openai,rcac,ollama,local}` | Choose the model runtime. |
+| `--api-key` | Override the API key instead of relying on environment variables. |
+| `--log-format {json,csv}` | Select one or both log formats (defaults to both when omitted). |
+| `--log-dir` | Directory to store structured run logs. |
+
+Each run prints the metric summary to stdout. Structured logs can be found under the supplied `--log-dir` with timestamped filenames for downstream analysis.

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from ..logging.factory import ExperimentLoggerFactory
 
@@ -19,5 +19,5 @@ class Experiment(ABC):
     def run(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """Execute the experiment and return metrics."""
 
-    def log(self, message: str) -> None:
-        self.logger.info(message)
+    def log(self, record: Mapping[str, Any]) -> None:
+        self.logger.log(record)

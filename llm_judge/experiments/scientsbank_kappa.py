@@ -1,12 +1,12 @@
 """Experiment evaluating LLM grading on SciEntsBank."""
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List
 
 from datasets.arrow_dataset import Dataset
+from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import cohen_kappa_score
 
 from ..data.loaders import DatasetConfig, DatasetLoader
@@ -63,12 +63,34 @@ class SciEntsBankKappaExperiment(Experiment):
                 "llm_response": response,
                 "predicted_label": predicted_label,
             }
-            self.log(json.dumps(log_record, ensure_ascii=False))
+            self.log(log_record)
             actual_labels.append(int(example["label"]))
             predicted_labels.append(predicted_label)
 
-        kappa = cohen_kappa_score(actual_labels, predicted_labels) if predicted_labels else float("nan")
-        return {"cohen_kappa": kappa}
+        if not predicted_labels:
+            return {
+                "cohen_kappa": float("nan"),
+                "accuracy": float("nan"),
+                "pearson": float("nan"),
+                "spearman": float("nan"),
+            }
+
+        kappa = cohen_kappa_score(actual_labels, predicted_labels)
+        accuracy = sum(int(a == b) for a, b in zip(actual_labels, predicted_labels)) / len(predicted_labels)
+
+        try:
+            pearson_corr, _ = pearsonr(actual_labels, predicted_labels)
+        except ValueError:
+            pearson_corr = float("nan")
+
+        spearman_corr, _ = spearmanr(actual_labels, predicted_labels)
+
+        return {
+            "cohen_kappa": kappa,
+            "accuracy": accuracy,
+            "pearson": float(pearson_corr),
+            "spearman": float(spearman_corr),
+        }
 
     def _load_dataset(self) -> Iterable[Dict[str, str]]:
         loader = DatasetLoader(
