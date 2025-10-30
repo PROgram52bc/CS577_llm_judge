@@ -1,13 +1,13 @@
 """Experiment evaluating LLM grading on SciEntsBank."""
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Dict, Iterable, List
 
 from datasets.arrow_dataset import Dataset
-from sklearn.metrics import cohen_kappa_score
+from scipy.stats import pearsonr, spearmanr
+from sklearn.metrics import accuracy_score, cohen_kappa_score
 
 from ..data.loaders import DatasetConfig, DatasetLoader
 from ..llms.base import LLMClient, PromptExample
@@ -63,12 +63,39 @@ class SciEntsBankKappaExperiment(Experiment):
                 "llm_response": response,
                 "predicted_label": predicted_label,
             }
-            self.log(json.dumps(log_record, ensure_ascii=False))
+            self.log_record(log_record)
             actual_labels.append(int(example["label"]))
             predicted_labels.append(predicted_label)
 
-        kappa = cohen_kappa_score(actual_labels, predicted_labels) if predicted_labels else float("nan")
-        return {"cohen_kappa": kappa}
+        if not predicted_labels:
+            return {
+                "cohen_kappa": float("nan"),
+                "accuracy": float("nan"),
+                "pearson_correlation": float("nan"),
+                "spearman_correlation": float("nan"),
+            }
+
+        kappa = cohen_kappa_score(actual_labels, predicted_labels)
+        accuracy = accuracy_score(actual_labels, predicted_labels)
+
+        pearson_corr = float("nan")
+        spearman_corr = float("nan")
+        try:
+            pearson_corr = pearsonr(actual_labels, predicted_labels)[0]
+        except Exception:  # pragma: no cover - scipy can raise on constant input
+            pearson_corr = float("nan")
+
+        try:
+            spearman_corr = spearmanr(actual_labels, predicted_labels)[0]
+        except Exception:  # pragma: no cover - scipy can raise on constant input
+            spearman_corr = float("nan")
+
+        return {
+            "cohen_kappa": kappa,
+            "accuracy": accuracy,
+            "pearson_correlation": pearson_corr,
+            "spearman_correlation": spearman_corr,
+        }
 
     def _load_dataset(self) -> Iterable[Dict[str, str]]:
         loader = DatasetLoader(

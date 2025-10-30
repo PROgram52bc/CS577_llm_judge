@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any, Dict
 
-from ..logging.factory import ExperimentLoggerFactory
+from ..logging.factory import ExperimentLoggerFactory, ExperimentRunLogger
 
 
 class Experiment(ABC):
@@ -13,11 +14,16 @@ class Experiment(ABC):
     def __init__(self, name: str, logger_factory: ExperimentLoggerFactory) -> None:
         self.name = name
         self.logger_factory = logger_factory
-        self.logger = self.logger_factory.create_logger(name)
+        self._run_logger: ExperimentRunLogger = self.logger_factory.create_logger(name)
 
     @abstractmethod
     def run(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """Execute the experiment and return metrics."""
 
     def log(self, message: str) -> None:
-        self.logger.info(message)
+        self._run_logger.log_text(message)
+
+    def log_record(self, record: Mapping[str, Any]) -> None:
+        """Log a structured record for the current experiment run."""
+
+        self._run_logger.log_record(record)
