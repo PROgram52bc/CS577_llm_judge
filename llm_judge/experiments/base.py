@@ -39,6 +39,11 @@ class Experiment(ABC, Generic[T]):
 
         self._run_logger.log_record(record)
 
+    def finalize_logs(self, metrics: Mapping[str, Any]) -> None:
+        """Finalize experiment logs, incorporating metric summaries."""
+
+        self._run_logger.finalize(metrics)
+
     def progress(
         self,
         iterable: Iterable[T],

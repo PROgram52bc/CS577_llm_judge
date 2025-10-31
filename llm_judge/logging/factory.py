@@ -4,7 +4,9 @@ from __future__ import annotations
 import atexit
 import csv
 import json
+import math
 from collections.abc import Mapping, Sequence
+from numbers import Real
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -16,10 +18,12 @@ class ExperimentRunLogger:
     def __init__(
         self,
         *,
+        base_path: Path,
         text_path: Path | None,
         json_path: Path | None,
         csv_path: Path | None,
     ) -> None:
+        self._base_path = base_path
         self._text_path = text_path
         self._json_path = json_path
         self._csv_path = csv_path
@@ -54,8 +58,9 @@ class ExperimentRunLogger:
                 self._csv_writer = csv.DictWriter(
                     self._csv_file,
                     fieldnames=fieldnames,
-                    delimiter="|",
+                    delimiter=",",
                     extrasaction="ignore",
+                    quoting=csv.QUOTE_MINIMAL,
                 )
                 self._csv_writer.writeheader()
             sanitized = {key: self._sanitize_value(record.get(key)) for key in self._csv_writer.fieldnames}
@@ -67,8 +72,52 @@ class ExperimentRunLogger:
         if value is None:
             return ""
         text = str(value)
-        text = text.replace("\r", " ").replace("\n", " ")
-        return text.replace("|", "/")
+        return text.replace("\r", " ").replace("\n", " ")
+
+    def finalize(self, metrics: Mapping[str, object]) -> None:
+        """Close log files and append key metrics to the file name."""
+
+        summary = self._format_metric_suffix(metrics)
+        self.close()
+        if not summary:
+            return
+
+        new_base = self._base_path.with_name(f"{self._base_path.name}_{summary}")
+        self._rename_path("_text_path", new_base)
+        self._rename_path("_json_path", new_base)
+        self._rename_path("_csv_path", new_base)
+        self._base_path = new_base
+
+    def _rename_path(self, attr: str, new_base: Path) -> None:
+        path: Path | None = getattr(self, attr)
+        if not path or not path.exists():
+            return
+        new_path = new_base.with_suffix(path.suffix)
+        path.rename(new_path)
+        setattr(self, attr, new_path)
+
+    @staticmethod
+    def _format_metric_suffix(metrics: Mapping[str, object]) -> str:
+        relevant = [
+            ("kap", metrics.get("cohen_kappa")),
+            ("acc", metrics.get("accuracy")),
+            ("pr", metrics.get("pearson_correlation")),
+            ("sr", metrics.get("spearman_correlation")),
+        ]
+
+        parts: list[str] = []
+        for prefix, value in relevant:
+            formatted = ExperimentRunLogger._format_metric_value(value)
+            parts.append(f"{prefix}{formatted}")
+        return "_".join(parts)
+
+    @staticmethod
+    def _format_metric_value(value: object) -> str:
+        if not isinstance(value, Real) or math.isnan(float(value)):
+            return "na"
+        percentage = float(value) * 100
+        formatted = f"{percentage:.1f}".rstrip("0").rstrip(".")
+        return formatted if formatted else "0"
 
     def close(self) -> None:
         """Close any open log file handles."""
@@ -110,7 +159,12 @@ class ExperimentLoggerFactory:
         text_path = base_path.with_suffix(".log") if "text" in self.log_formats else None
         json_path = base_path.with_suffix(".jsonl") if "json" in self.log_formats else None
         csv_path = base_path.with_suffix(".csv") if "csv" in self.log_formats else None
-        return ExperimentRunLogger(text_path=text_path, json_path=json_path, csv_path=csv_path)
+        return ExperimentRunLogger(
+            base_path=base_path,
+            text_path=text_path,
+            json_path=json_path,
+            csv_path=csv_path,
+        )
 
     def _base_path(self, experiment_name: str, run_name: Optional[str]) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

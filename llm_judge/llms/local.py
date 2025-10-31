@@ -36,7 +36,7 @@ class OllamaClient(LLMClient):
         self.ollama_command = list(ollama_command) if ollama_command is not None else ["ollama"]
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
-        command = [*self.ollama_command, "run", self.model_name]
+        command = [*self.ollama_command, "run", self.model_name, "--think=false"]
         if kwargs:
             raise ValueError("OllamaClient does not support additional keyword arguments")
 

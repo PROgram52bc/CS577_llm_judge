@@ -235,9 +235,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         formatted = ", ".join(
             f"{names[label] if names else label}: {counts[label]}" for label in sorted(counts)
         )
-        self.log(
+        message = (
             f"Label distribution for {self.scheme.display_name} (n={len(dataset)}): {formatted}"
         )
+        self.log(message)
+        print(message)
 
     def _resolve_label_names(self, dataset: Dataset) -> Sequence[str]:
         if self.scheme.label_names is not None:
