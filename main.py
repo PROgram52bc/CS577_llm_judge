@@ -6,7 +6,9 @@ from pathlib import Path
 
 from llm_judge.experiments.scientsbank_kappa import (
     SciEntsBankExperimentConfig,
-    SciEntsBankKappaExperiment,
+    SciEntsBankKappa2WayExperiment,
+    SciEntsBankKappa3WayExperiment,
+    SciEntsBankKappa5WayExperiment,
 )
 from llm_judge.logging.factory import ExperimentLoggerFactory
 from llm_judge.llms.base import LLMClient
@@ -22,6 +24,12 @@ from llm_judge.llms import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run LLM judge experiments")
     parser.add_argument("--sample-size", type=int, default=10, help="Number of examples to grade")
+    parser.add_argument(
+        "--label-scheme",
+        choices=["5way", "3way", "2way"],
+        default="5way",
+        help="Label scheme to evaluate (5way, 3way, or 2way).",
+    )
     parser.add_argument(
         "--log-dir",
         type=Path,
@@ -74,6 +82,12 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Command to invoke Ollama when using the Ollama backend (e.g., 'ollama').",
     )
+    parser.add_argument(
+        "--label-cache-dir",
+        type=Path,
+        default=None,
+        help="Directory for storing merged SciEntsBank datasets for reuse.",
+    )
     return parser.parse_args()
 
 
@@ -81,10 +95,20 @@ def main() -> None:
     args = parse_args()
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
-    experiment = SciEntsBankKappaExperiment(
+    config = SciEntsBankExperimentConfig(
+        sample_size=args.sample_size,
+        cache_dir=args.label_cache_dir,
+    )
+    experiment_cls = {
+        "5way": SciEntsBankKappa5WayExperiment,
+        "3way": SciEntsBankKappa3WayExperiment,
+        "2way": SciEntsBankKappa2WayExperiment,
+    }[args.label_scheme]
+    experiment = experiment_cls(
         llm_client=llm_client,
         logger_factory=logger_factory,
-        config=SciEntsBankExperimentConfig(sample_size=args.sample_size),
+        backend_name=args.llm_backend,
+        config=config,
     )
     metrics = experiment.run()
     for name, value in metrics.items():

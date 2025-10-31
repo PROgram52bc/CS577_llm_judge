@@ -19,10 +19,12 @@ class ExperimentRunLogger:
         text_path: Path | None,
         json_path: Path | None,
         csv_path: Path | None,
+        delimiter: str = "|",
     ) -> None:
         self._text_path = text_path
         self._json_path = json_path
         self._csv_path = csv_path
+        self._delimiter = delimiter
 
         self._text_file = self._text_path.open("w", encoding="utf-8") if self._text_path else None
         self._json_file = self._json_path.open("w", encoding="utf-8") if self._json_path else None
@@ -51,9 +53,11 @@ class ExperimentRunLogger:
         if self._csv_file:
             if self._csv_writer is None:
                 fieldnames = list(record.keys())
-                self._csv_writer = csv.DictWriter(self._csv_file, fieldnames=fieldnames)
+                self._csv_writer = csv.DictWriter(
+                    self._csv_file, fieldnames=fieldnames, delimiter=self._delimiter
+                )
                 self._csv_writer.writeheader()
-            self._csv_writer.writerow(record)
+            self._csv_writer.writerow(self._sanitize_record(record))
             self._csv_file.flush()
 
     def close(self) -> None:
@@ -66,6 +70,19 @@ class ExperimentRunLogger:
         if self._csv_file and not self._csv_file.closed:
             self._csv_file.close()
 
+    def _sanitize_record(self, record: Mapping[str, object]) -> dict[str, object]:
+        """Remove newlines and delimiter characters from record values."""
+
+        sanitized: dict[str, object] = {}
+        for key, value in record.items():
+            if isinstance(value, str):
+                cleaned = value.replace("\r", " ").replace("\n", " ")
+                cleaned = cleaned.replace(self._delimiter, " ")
+                sanitized[key] = cleaned
+            else:
+                sanitized[key] = value
+        return sanitized
+
 
 class ExperimentLoggerFactory:
     """Factory for creating experiment loggers with selectable formats."""
@@ -76,6 +93,8 @@ class ExperimentLoggerFactory:
         self,
         base_dir: Path = Path("logs"),
         log_formats: Sequence[str] | None = None,
+        *,
+        delimiter: str = "|",
     ) -> None:
         self.base_dir = base_dir
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -86,6 +105,7 @@ class ExperimentLoggerFactory:
             valid_formats = ", ".join(sorted(self._VALID_FORMATS))
             raise ValueError(f"Unsupported log format(s): {formatted}. Valid options: {valid_formats}")
         self.log_formats = tuple(dict.fromkeys(requested_formats))  # preserve order & deduplicate
+        self.delimiter = delimiter
 
     def create_logger(
         self, experiment_name: str, run_name: Optional[str] = None
@@ -96,7 +116,12 @@ class ExperimentLoggerFactory:
         text_path = base_path.with_suffix(".log") if "text" in self.log_formats else None
         json_path = base_path.with_suffix(".jsonl") if "json" in self.log_formats else None
         csv_path = base_path.with_suffix(".csv") if "csv" in self.log_formats else None
-        return ExperimentRunLogger(text_path=text_path, json_path=json_path, csv_path=csv_path)
+        return ExperimentRunLogger(
+            text_path=text_path,
+            json_path=json_path,
+            csv_path=csv_path,
+            delimiter=self.delimiter,
+        )
 
     def _base_path(self, experiment_name: str, run_name: Optional[str]) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
