@@ -13,7 +13,14 @@ class LocalPipelineClient(LLMClient):
     """A simple wrapper around a transformers text-generation pipeline."""
 
     def __init__(self, model_name: str, task: str = "text-generation", **pipeline_kwargs: Any) -> None:
+        self.model_name = model_name
+        self.task = task
         self.generator = pipeline(task=task, model=model_name, **pipeline_kwargs)
+
+    @property
+    def backend_name(self) -> str:
+        sanitized = self.model_name.replace("/", "-")
+        return f"local_pipeline_{sanitized}"
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         outputs = self.generator(prompt, **kwargs)
@@ -34,6 +41,11 @@ class OllamaClient(LLMClient):
     ) -> None:
         self.model_name = model_name
         self.ollama_command = list(ollama_command) if ollama_command is not None else ["ollama"]
+
+    @property
+    def backend_name(self) -> str:
+        sanitized = self.model_name.replace("/", "-")
+        return f"ollama_{sanitized}"
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         command = [*self.ollama_command, "run", self.model_name]

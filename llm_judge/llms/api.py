@@ -20,6 +20,10 @@ class OpenAIClient(LLMClient):
             raise ValueError("OpenAI API key must be provided via argument or OPENAI_API_KEY")
         openai.api_key = self.api_key
 
+    @property
+    def backend_name(self) -> str:
+        return f"openai_{self.model}"
+
     def generate(self, prompt: str, **kwargs: Any) -> str:
         response = openai.ChatCompletion.create(
             model=self.model,
@@ -47,6 +51,10 @@ class RCACGenAIClient(LLMClient):
             raise ValueError(
                 "RCAC GenAI API key must be provided via argument or RCAC_GENAI_API_KEY"
             )
+
+    @property
+    def backend_name(self) -> str:
+        return f"rcac_{self.model}"
 
     def generate(self, prompt: str, **kwargs: Any) -> str:
         payload: Dict[str, Any] = {

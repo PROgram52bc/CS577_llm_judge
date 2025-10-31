@@ -4,6 +4,7 @@ from __future__ import annotations
 import atexit
 import csv
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,8 @@ from typing import Optional
 
 class ExperimentRunLogger:
     """Write experiment data in one or more structured log formats."""
+
+    _CSV_SEPARATOR = "|"
 
     def __init__(
         self,
@@ -49,11 +52,19 @@ class ExperimentRunLogger:
             self._json_file.flush()
 
         if self._csv_file:
+            csv_record = {
+                str(key): self._sanitize_csv_value(value)
+                for key, value in record.items()
+            }
             if self._csv_writer is None:
-                fieldnames = list(record.keys())
-                self._csv_writer = csv.DictWriter(self._csv_file, fieldnames=fieldnames)
+                fieldnames = list(csv_record.keys())
+                self._csv_writer = csv.DictWriter(
+                    self._csv_file,
+                    fieldnames=fieldnames,
+                    delimiter=self._CSV_SEPARATOR,
+                )
                 self._csv_writer.writeheader()
-            self._csv_writer.writerow(record)
+            self._csv_writer.writerow(csv_record)
             self._csv_file.flush()
 
     def close(self) -> None:
@@ -65,6 +76,13 @@ class ExperimentRunLogger:
             self._json_file.close()
         if self._csv_file and not self._csv_file.closed:
             self._csv_file.close()
+
+    def _sanitize_csv_value(self, value: object) -> str:
+        text = str(value)
+        text = text.replace("\r", " ").replace("\n", " ")
+        if self._CSV_SEPARATOR in text:
+            text = text.replace(self._CSV_SEPARATOR, " ")
+        return text
 
 
 class ExperimentLoggerFactory:
@@ -100,8 +118,16 @@ class ExperimentLoggerFactory:
 
     def _base_path(self, experiment_name: str, run_name: Optional[str]) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        exp_component = self._sanitize_component(experiment_name)
         if run_name:
-            file_name = f"{experiment_name}_{run_name}_{timestamp}"
+            run_component = self._sanitize_component(run_name)
+            file_name = f"{exp_component}_{run_component}_{timestamp}"
         else:
-            file_name = f"{experiment_name}_{timestamp}"
+            file_name = f"{exp_component}_{timestamp}"
         return self.base_dir / file_name
+
+    @staticmethod
+    def _sanitize_component(component: str) -> str:
+        sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", component)
+        sanitized = sanitized.strip("-_")
+        return sanitized or "run"

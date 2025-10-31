@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from llm_judge.data.loaders import DatasetConfig
 from llm_judge.experiments.scientsbank_kappa import (
+    LabelScheme,
     SciEntsBankExperimentConfig,
     SciEntsBankKappaExperiment,
 )
@@ -17,6 +19,18 @@ from llm_judge.llms import (
     OpenAIClient,
     RCACGenAIClient,
 )
+
+
+def parse_label_scheme_arg(value: str) -> str:
+    normalized = value.replace("-", "").lower()
+    try:
+        LabelScheme(normalized)
+    except ValueError as exc:  # pragma: no cover - defensive branch
+        valid = ", ".join(scheme.value for scheme in LabelScheme)
+        raise argparse.ArgumentTypeError(
+            f"Unsupported label scheme '{value}'. Choose from: {valid}"
+        ) from exc
+    return normalized
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,6 +88,30 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Command to invoke Ollama when using the Ollama backend (e.g., 'ollama').",
     )
+    parser.add_argument(
+        "--label-scheme",
+        "--label-schemes",
+        dest="label_schemes",
+        action="append",
+        type=parse_label_scheme_arg,
+        help=(
+            "Label scheme(s) to evaluate (accepted values: 5way, 3way, 2way). "
+            "Provide multiple times to run more than one. Defaults to running all schemes."
+        ),
+    )
+    parser.add_argument(
+        "--merged-cache-dir",
+        type=Path,
+        help=(
+            "Optional directory to cache datasets with merged labels. "
+            "The directory will contain one subfolder per label scheme."
+        ),
+    )
+    parser.add_argument(
+        "--refresh-merged-cache",
+        action="store_true",
+        help="Rebuild cached merged datasets even if they already exist.",
+    )
     return parser.parse_args()
 
 
@@ -81,14 +119,35 @@ def main() -> None:
     args = parse_args()
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
-    experiment = SciEntsBankKappaExperiment(
-        llm_client=llm_client,
-        logger_factory=logger_factory,
-        config=SciEntsBankExperimentConfig(sample_size=args.sample_size),
+    selected_schemes = (
+        [LabelScheme(value) for value in dict.fromkeys(args.label_schemes)]
+        if args.label_schemes
+        else list(LabelScheme)
     )
-    metrics = experiment.run()
-    for name, value in metrics.items():
-        print(f"{name.replace('_', ' ').title()}: {value}")
+
+    experiments = []
+    dataset_config = DatasetConfig(name="nkazi/SciEntsBank", split="train")
+    for scheme in selected_schemes:
+        experiment_config = SciEntsBankExperimentConfig(
+            dataset=dataset_config,
+            sample_size=args.sample_size,
+            label_scheme=scheme,
+            merged_cache_dir=args.merged_cache_dir,
+            refresh_cached_merges=args.refresh_merged_cache,
+        )
+        experiments.append(
+            SciEntsBankKappaExperiment(
+                llm_client=llm_client,
+                logger_factory=logger_factory,
+                config=experiment_config,
+            )
+        )
+
+    for experiment in experiments:
+        print(f"Running {experiment.name} with backend {llm_client.backend_name}...")
+        metrics = experiment.run()
+        for name, value in metrics.items():
+            print(f"{experiment.name} | {name.replace('_', ' ').title()}: {value}")
 
 
 def build_llm_client(args: argparse.Namespace) -> LLMClient:
