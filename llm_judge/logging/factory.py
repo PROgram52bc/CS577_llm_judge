@@ -4,10 +4,16 @@ from __future__ import annotations
 import atexit
 import csv
 import json
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypeVar
+
+from tqdm import tqdm
+
+
+T = TypeVar("T")
 
 
 class ExperimentRunLogger:
@@ -51,10 +57,56 @@ class ExperimentRunLogger:
         if self._csv_file:
             if self._csv_writer is None:
                 fieldnames = list(record.keys())
-                self._csv_writer = csv.DictWriter(self._csv_file, fieldnames=fieldnames)
+                self._csv_writer = csv.DictWriter(
+                    self._csv_file, fieldnames=fieldnames, delimiter="|"
+                )
                 self._csv_writer.writeheader()
-            self._csv_writer.writerow(record)
+            sanitized_record = {key: self._sanitize_field(value) for key, value in record.items()}
+            self._csv_writer.writerow(sanitized_record)
             self._csv_file.flush()
+
+    def log_progress(self, current: int, total: int, description: str) -> None:
+        """Log a textual progress indicator."""
+
+        if not self._text_file:
+            return
+        total = max(total, 1)
+        percentage = (current / total) * 100
+        bar_width = 20
+        filled = min(bar_width, int(bar_width * current / total))
+        bar = "#" * filled + "-" * (bar_width - filled)
+        self._text_file.write(
+            f"{description} [{bar}] {current}/{total} ({percentage:5.1f}%)\n"
+        )
+        self._text_file.flush()
+
+    def iterate_with_progress(
+        self,
+        iterable: Iterable[T],
+        *,
+        total: int,
+        description: str,
+    ) -> Iterator[tuple[int, T]]:
+        """Yield items from *iterable* while displaying and logging progress."""
+
+        progress_bar = tqdm(total=total, desc=description, unit="sample")
+        try:
+            for index, item in enumerate(iterable, start=1):
+                progress_bar.update(1)
+                self.log_progress(index, total, description)
+                yield index, item
+        finally:
+            progress_bar.close()
+
+    @staticmethod
+    def _sanitize_field(value: object) -> str:
+        """Prepare a field value for pipe-delimited CSV output."""
+
+        if isinstance(value, str):
+            collapsed = re.sub(r"[\r\n]+", " ", value)
+            cleaned = collapsed.replace("|", " ")
+            return re.sub(r"\s+", " ", cleaned).strip()
+        return str(value)
 
     def close(self) -> None:
         """Close any open log file handles."""

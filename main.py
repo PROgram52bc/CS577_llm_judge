@@ -74,6 +74,17 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help="Command to invoke Ollama when using the Ollama backend (e.g., 'ollama').",
     )
+    parser.add_argument(
+        "--processed-cache-dir",
+        type=Path,
+        default=None,
+        help="Directory for caching processed SciEntsBank datasets.",
+    )
+    parser.add_argument(
+        "--no-reuse-processed-cache",
+        action="store_true",
+        help="Rebuild processed datasets even if cached versions are available.",
+    )
     return parser.parse_args()
 
 
@@ -81,14 +92,28 @@ def main() -> None:
     args = parse_args()
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
-    experiment = SciEntsBankKappaExperiment(
-        llm_client=llm_client,
-        logger_factory=logger_factory,
-        config=SciEntsBankExperimentConfig(sample_size=args.sample_size),
-    )
-    metrics = experiment.run()
-    for name, value in metrics.items():
-        print(f"{name.replace('_', ' ').title()}: {value}")
+    experiments = []
+    for label_scheme in ("5way", "3way", "2way"):
+        experiment_config = SciEntsBankExperimentConfig(
+            sample_size=args.sample_size,
+            label_scheme=label_scheme,
+            processed_cache_dir=args.processed_cache_dir,
+            reuse_processed_cache=not args.no_reuse_processed_cache,
+        )
+        experiments.append(
+            SciEntsBankKappaExperiment(
+                llm_client=llm_client,
+                logger_factory=logger_factory,
+                backend_name=args.llm_backend,
+                config=experiment_config,
+            )
+        )
+
+    for experiment in experiments:
+        print(f"\n=== Running {experiment.name} with backend {args.llm_backend} ===")
+        metrics = experiment.run()
+        for name, value in metrics.items():
+            print(f"{experiment.name} - {name.replace('_', ' ').title()}: {value}")
 
 
 def build_llm_client(args: argparse.Namespace) -> LLMClient:

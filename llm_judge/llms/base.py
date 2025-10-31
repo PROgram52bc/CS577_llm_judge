@@ -20,11 +20,14 @@ class PromptExample:
     reference_answer: str
     student_answer: str
 
-    def to_prompt(self) -> str:
+    def to_prompt(self, scoring_instructions: str | None = None) -> str:
+        instructions = scoring_instructions or (
+            "Provide a score between 0 and 4 along with a short justification."
+        )
         return (
             "You are an expert grader.\n"
             f"Question: {self.instruction}\n"
             f"Reference Answer: {self.reference_answer}\n"
             f"Student Answer: {self.student_answer}\n"
-            "Provide a score between 0 and 4 along with a short justification."
+            f"{instructions}"
         )
