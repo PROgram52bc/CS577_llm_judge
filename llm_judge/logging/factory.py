@@ -4,6 +4,7 @@ from __future__ import annotations
 import atexit
 import csv
 import json
+import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -16,10 +17,12 @@ class ExperimentRunLogger:
     def __init__(
         self,
         *,
+        base_path: Path,
         text_path: Path | None,
         json_path: Path | None,
         csv_path: Path | None,
     ) -> None:
+        self._base_path = base_path
         self._text_path = text_path
         self._json_path = json_path
         self._csv_path = csv_path
@@ -54,8 +57,9 @@ class ExperimentRunLogger:
                 self._csv_writer = csv.DictWriter(
                     self._csv_file,
                     fieldnames=fieldnames,
-                    delimiter="|",
+                    delimiter=",",
                     extrasaction="ignore",
+                    quoting=csv.QUOTE_MINIMAL,
                 )
                 self._csv_writer.writeheader()
             sanitized = {key: self._sanitize_value(record.get(key)) for key in self._csv_writer.fieldnames}
@@ -68,7 +72,61 @@ class ExperimentRunLogger:
             return ""
         text = str(value)
         text = text.replace("\r", " ").replace("\n", " ")
-        return text.replace("|", "/")
+        return text
+
+    def finalize_metrics(self, metrics: Mapping[str, object]) -> None:
+        """Append key metric values to the log file names."""
+
+        suffix = self._build_metric_suffix(metrics)
+        if not suffix:
+            return
+
+        new_base = self._base_path.with_name(f"{self._base_path.name}_{suffix}")
+
+        if self._text_path:
+            if self._text_file:
+                self._text_file.flush()
+            new_text_path = new_base.with_suffix(self._text_path.suffix)
+            self._text_path.rename(new_text_path)
+            self._text_path = new_text_path
+        if self._json_path:
+            if self._json_file:
+                self._json_file.flush()
+            new_json_path = new_base.with_suffix(self._json_path.suffix)
+            self._json_path.rename(new_json_path)
+            self._json_path = new_json_path
+        if self._csv_path:
+            if self._csv_file:
+                self._csv_file.flush()
+            new_csv_path = new_base.with_suffix(self._csv_path.suffix)
+            self._csv_path.rename(new_csv_path)
+            self._csv_path = new_csv_path
+        self._base_path = new_base
+
+    def _build_metric_suffix(self, metrics: Mapping[str, object]) -> str:
+        parts: list[str] = []
+        for key, label in (
+            ("accuracy", "acc"),
+            ("pearson_correlation", "pr"),
+            ("spearman_correlation", "sp"),
+            ("cohen_kappa", "kap"),
+        ):
+            value = metrics.get(key)
+            formatted = self._format_metric_value(value)
+            if formatted:
+                parts.append(f"{label}{formatted}")
+        return "_".join(parts)
+
+    @staticmethod
+    def _format_metric_value(value: object) -> str | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        if math.isnan(number):
+            return None
+        formatted = f"{number:.2f}".rstrip("0").rstrip(".")
+        return formatted or "0"
 
     def close(self) -> None:
         """Close any open log file handles."""
@@ -110,7 +168,12 @@ class ExperimentLoggerFactory:
         text_path = base_path.with_suffix(".log") if "text" in self.log_formats else None
         json_path = base_path.with_suffix(".jsonl") if "json" in self.log_formats else None
         csv_path = base_path.with_suffix(".csv") if "csv" in self.log_formats else None
-        return ExperimentRunLogger(text_path=text_path, json_path=json_path, csv_path=csv_path)
+        return ExperimentRunLogger(
+            base_path=base_path,
+            text_path=text_path,
+            json_path=json_path,
+            csv_path=csv_path,
+        )
 
     def _base_path(self, experiment_name: str, run_name: Optional[str]) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

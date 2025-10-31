@@ -39,6 +39,11 @@ class Experiment(ABC, Generic[T]):
 
         self._run_logger.log_record(record)
 
+    def finalize_run(self, metrics: Mapping[str, Any]) -> None:
+        """Update log files with summary metrics."""
+
+        self._run_logger.finalize_metrics(metrics)
+
     def progress(
         self,
         iterable: Iterable[T],

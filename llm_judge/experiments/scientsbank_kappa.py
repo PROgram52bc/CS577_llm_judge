@@ -108,7 +108,9 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         dataset = self._load_dataset()
         if len(dataset) == 0:
             self.log("No examples available after loading dataset.")
-            return self._empty_metrics()
+            metrics = self._empty_metrics()
+            self.finalize_run(metrics)
+            return metrics
 
         self._label_names = self._resolve_label_names(dataset)
         score_instruction = self._build_score_instruction()
@@ -182,11 +184,14 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             self.log(f"Skipped {skipped} example(s) due to parsing issues.")
 
         if not predicted_labels:
-            return self._empty_metrics()
+            metrics = self._empty_metrics()
+            self.finalize_run(metrics)
+            return metrics
 
         metrics = self._compute_metrics(actual_labels, predicted_labels)
         for name, value in metrics.items():
             self.log(f"{name}: {value}")
+        self.finalize_run(metrics)
         return metrics
 
     def _load_dataset(self) -> Dataset:
@@ -235,9 +240,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         formatted = ", ".join(
             f"{names[label] if names else label}: {counts[label]}" for label in sorted(counts)
         )
-        self.log(
+        message = (
             f"Label distribution for {self.scheme.display_name} (n={len(dataset)}): {formatted}"
         )
+        print(message)
+        self.log(message)
 
     def _resolve_label_names(self, dataset: Dataset) -> Sequence[str]:
         if self.scheme.label_names is not None:
