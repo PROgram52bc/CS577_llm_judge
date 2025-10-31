@@ -51,10 +51,24 @@ class ExperimentRunLogger:
         if self._csv_file:
             if self._csv_writer is None:
                 fieldnames = list(record.keys())
-                self._csv_writer = csv.DictWriter(self._csv_file, fieldnames=fieldnames)
+                self._csv_writer = csv.DictWriter(
+                    self._csv_file,
+                    fieldnames=fieldnames,
+                    delimiter="|",
+                    extrasaction="ignore",
+                )
                 self._csv_writer.writeheader()
-            self._csv_writer.writerow(record)
+            sanitized = {key: self._sanitize_value(record.get(key)) for key in self._csv_writer.fieldnames}
+            self._csv_writer.writerow(sanitized)
             self._csv_file.flush()
+
+    @staticmethod
+    def _sanitize_value(value: object) -> str:
+        if value is None:
+            return ""
+        text = str(value)
+        text = text.replace("\r", " ").replace("\n", " ")
+        return text.replace("|", "/")
 
     def close(self) -> None:
         """Close any open log file handles."""

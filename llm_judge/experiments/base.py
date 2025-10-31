@@ -2,19 +2,30 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from typing import Any, Dict
+from collections.abc import Iterable, Mapping
+from typing import Any, Dict, Generic, Iterator, Optional, TypeVar
+
+from tqdm.auto import tqdm
 
 from ..logging.factory import ExperimentLoggerFactory, ExperimentRunLogger
 
 
-class Experiment(ABC):
+T = TypeVar("T")
+
+
+class Experiment(ABC, Generic[T]):
     """Base class for evaluation experiments."""
 
-    def __init__(self, name: str, logger_factory: ExperimentLoggerFactory) -> None:
+    def __init__(
+        self,
+        name: str,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        run_name: Optional[str] = None,
+    ) -> None:
         self.name = name
         self.logger_factory = logger_factory
-        self._run_logger: ExperimentRunLogger = self.logger_factory.create_logger(name)
+        self._run_logger: ExperimentRunLogger = self.logger_factory.create_logger(name, run_name)
 
     @abstractmethod
     def run(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -27,3 +38,14 @@ class Experiment(ABC):
         """Log a structured record for the current experiment run."""
 
         self._run_logger.log_record(record)
+
+    def progress(
+        self,
+        iterable: Iterable[T],
+        *,
+        total: int | None = None,
+        description: str | None = None,
+    ) -> Iterator[T]:
+        """Wrap an iterable in a tqdm progress bar."""
+
+        return iter(tqdm(iterable, total=total, desc=description, unit="sample"))
