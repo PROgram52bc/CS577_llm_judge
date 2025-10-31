@@ -7,6 +7,7 @@ from pathlib import Path
 
 from llm_judge.experiments.scientsbank_kappa import (
     LABEL_SCHEMES,
+    SciEntsBankConsensusExperiment,
     SciEntsBankExperimentConfig,
     SciEntsBankKappa2WayExperiment,
     SciEntsBankKappa3WayExperiment,
@@ -20,11 +21,21 @@ from llm_judge.llms import (
     OllamaClient,
     OpenAIClient,
     RCACGenAIClient,
+    RCAC_AVAILABLE_MODELS,
 )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run LLM judge experiments")
+    parser.add_argument(
+        "--experiment",
+        choices=["kappa", "consensus"],
+        default="kappa",
+        help=(
+            "Experiment to run: 'kappa' performs a single grading pass per sample, "
+            "while 'consensus' requires agreement across multiple LLM runs."
+        ),
+    )
     parser.add_argument("--sample-size", type=int, default=10, help="Number of examples to grade")
     parser.add_argument(
         "--log-dir",
@@ -48,7 +59,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-name",
         default=None,
-        help="Model name or identifier for the selected backend.",
+        help=(
+            "Model name or identifier for the selected backend. For RCAC, available models "
+            "include llama3.1:latest, llama4:latest, qwen2.5:72b, and gpt-oss:120b."
+        ),
     )
     parser.add_argument(
         "--api-key",
@@ -92,6 +106,20 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional directory to cache converted datasets (e.g., 3-way and 2-way).",
     )
+    parser.add_argument(
+        "--consensus-runs",
+        type=int,
+        default=3,
+        help="Number of independent generations in the consensus experiment.",
+    )
+    parser.add_argument(
+        "--consensus-threshold",
+        type=float,
+        default=0.66,
+        help=(
+            "Minimum fraction of runs that must agree on a label for the consensus experiment to keep the prediction."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -106,15 +134,10 @@ def main() -> None:
         processed_cache_dir=args.processed_cache_dir,
     )
 
-    experiment_classes = {
-        "5way": SciEntsBankKappaExperiment,
-        "3way": SciEntsBankKappa3WayExperiment,
-        "2way": SciEntsBankKappa2WayExperiment,
-    }
-
     for scheme in schemes:
-        experiment_cls = experiment_classes[scheme]
-        experiment = experiment_cls(
+        experiment = build_experiment(
+            args,
+            scheme,
             llm_client=llm_client,
             logger_factory=logger_factory,
             run_name=run_identifier,
@@ -138,7 +161,7 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
         model_name = args.model_name or "gpt-3.5-turbo"
         return OpenAIClient(model=model_name, api_key=args.api_key)
     if backend == "rcac":
-        model_name = args.model_name or "llama3.1:latest"
+        model_name = args.model_name or RCAC_AVAILABLE_MODELS[0]
         return RCACGenAIClient(
             model=model_name,
             api_key=args.api_key,
@@ -162,6 +185,43 @@ def build_run_identifier(args: argparse.Namespace) -> str:
         sanitized = sanitized.strip("-_") or "model"
         parts.append(sanitized)
     return "_".join(parts)
+
+
+def build_experiment(
+    args: argparse.Namespace,
+    scheme: str,
+    *,
+    llm_client: LLMClient,
+    logger_factory: ExperimentLoggerFactory,
+    run_name: str,
+    config: SciEntsBankExperimentConfig,
+):
+    if args.experiment == "kappa":
+        experiment_classes = {
+            "5way": SciEntsBankKappaExperiment,
+            "3way": SciEntsBankKappa3WayExperiment,
+            "2way": SciEntsBankKappa2WayExperiment,
+        }
+        experiment_cls = experiment_classes[scheme]
+        return experiment_cls(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            run_name=run_name,
+            config=config,
+        )
+
+    if args.experiment == "consensus":
+        return SciEntsBankConsensusExperiment(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme=scheme,
+            run_name=run_name,
+            config=config,
+            num_runs=args.consensus_runs,
+            agreement_threshold=args.consensus_threshold,
+        )
+
+    raise ValueError(f"Unsupported experiment type: {args.experiment}")
 
 
 def resolve_label_schemes(requested: list[str]) -> list[str]:

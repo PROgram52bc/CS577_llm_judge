@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import openai
 import requests
 
 from .base import LLMClient
+
+
+RCAC_AVAILABLE_MODELS: Tuple[str, ...] = (
+    "llama3.1:latest",
+    "llama4:latest",
+    "qwen2.5:72b",
+    "gpt-oss:120b",
+)
 
 
 class OpenAIClient(LLMClient):
@@ -30,7 +38,11 @@ class OpenAIClient(LLMClient):
 
 
 class RCACGenAIClient(LLMClient):
-    """Client for the Purdue RCAC GenAI chat completion endpoint."""
+    """Client for the Purdue RCAC GenAI chat completion endpoint.
+
+    The RCAC service exposes several chat-oriented models. Known identifiers
+    include the values listed in :data:`RCAC_AVAILABLE_MODELS`.
+    """
 
     def __init__(
         self,

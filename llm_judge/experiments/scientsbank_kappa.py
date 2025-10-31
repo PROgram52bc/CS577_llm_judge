@@ -5,7 +5,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from datasets import ClassLabel, Dataset
 from scipy.stats import pearsonr, spearmanr
@@ -82,11 +82,24 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
 }
 
 
-class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
-    """Run an LLM grading experiment on the SciEntsBank dataset."""
+@dataclass
+class PredictionResult:
+    """Output of grading a single SciEntsBank example."""
+
+    predicted_label: int | None
+    raw_labels: List[int | None]
+    responses: List[str]
+    withdrawn: bool = False
+    reason: str | None = None
+    details: Mapping[str, Any] | None = None
+
+
+class SciEntsBankGradingExperiment(Experiment[Dict[str, str]]):
+    """Common logic for SciEntsBank grading experiments."""
 
     def __init__(
         self,
+        name: str,
         llm_client: LLMClient,
         logger_factory: ExperimentLoggerFactory,
         *,
@@ -98,13 +111,13 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         if scheme is None:
             valid = ", ".join(sorted(LABEL_SCHEMES))
             raise ValueError(f"Unknown label scheme '{label_scheme}'. Valid options: {valid}")
-        super().__init__(f"scientsbank_kappa_{scheme.key}", logger_factory, run_name=run_name)
+        super().__init__(name, logger_factory, run_name=run_name)
         self.llm_client = llm_client
         self.config = config or SciEntsBankExperimentConfig()
         self.scheme = scheme
         self._label_names: Sequence[str] | None = None
 
-    def run(self) -> Dict[str, float]:
+    def run(self) -> Dict[str, float | int]:
         dataset = self._load_dataset()
         if len(dataset) == 0:
             self.log("No examples available after loading dataset.")
@@ -119,6 +132,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
 
         actual_labels: List[int] = []
         predicted_labels: List[int] = []
+        withdrawn = 0
         skipped = 0
 
         label_feature = dataset.features.get("label")
@@ -137,27 +151,10 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 student_answer=example["student_answer"],
                 score_instruction=score_instruction,
             ).to_prompt()
-            response = self.llm_client.generate(prompt)
-            raw_label = self._extract_label(response)
-            if raw_label is None:
-                skipped += 1
-                self.log(f"Skipping example {example['id']} due to unparseable response: {response}")
-                continue
-
-            predicted_label = self._normalize_prediction(raw_label)
-            if predicted_label is None:
-                skipped += 1
-                self.log(
-                    f"Skipping example {example['id']} due to unsupported label {raw_label} for "
-                    f"{self.scheme.display_name} scheme"
-                )
-                continue
+            result = self._predict_example(prompt, example, index)
 
             gold_label = int(example["label"])
-            actual_labels.append(gold_label)
-            predicted_labels.append(predicted_label)
-
-            record = {
+            record: Dict[str, Any] = {
                 "sample_index": index,
                 "total_samples": len(dataset),
                 "label_scheme": self.scheme.display_name,
@@ -167,27 +164,55 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 "student_answer": example.get("student_answer"),
                 "gold_label_id": gold_label,
                 "gold_label_name": label_lookup(gold_label),
-                "raw_predicted_label": raw_label,
-                "predicted_label_id": predicted_label,
-                "predicted_label_name": self._label_names[predicted_label]
-                if self._label_names
-                else str(predicted_label),
-                "prediction_matches": predicted_label == gold_label,
-                "llm_response": response,
+                "raw_predicted_labels": result.raw_labels,
+                "raw_predicted_label": result.raw_labels[0] if result.raw_labels else None,
+                "predicted_label_id": result.predicted_label,
+                "predicted_label_name": self._label_name(result.predicted_label),
+                "prediction_matches": (
+                    result.predicted_label == gold_label if result.predicted_label is not None else None
+                ),
+                "llm_responses": result.responses,
+                "llm_response": result.responses[0] if result.responses else "",
+                "withdrawn": result.withdrawn,
                 "score_instruction": score_instruction,
             }
+            if result.details:
+                record.update(result.details)
             self.log_record(record)
+
+            if result.withdrawn:
+                withdrawn += 1
+                if result.reason:
+                    self.log(result.reason)
+                continue
+
+            if result.predicted_label is None:
+                skipped += 1
+                if result.reason:
+                    self.log(result.reason)
+                continue
+
+            actual_labels.append(gold_label)
+            predicted_labels.append(result.predicted_label)
 
         if skipped:
             self.log(f"Skipped {skipped} example(s) due to parsing issues.")
+        if withdrawn:
+            self.log(f"Withdrew {withdrawn} example(s) due to insufficient agreement.")
 
-        if not predicted_labels:
-            return self._empty_metrics()
-
-        metrics = self._compute_metrics(actual_labels, predicted_labels)
+        metrics = self._compute_metrics(
+            actual_labels,
+            predicted_labels,
+            total_examples=len(dataset),
+            withdrawn_examples=withdrawn,
+            skipped_examples=skipped,
+        )
         for name, value in metrics.items():
             self.log(f"{name}: {value}")
         return metrics
+
+    def _predict_example(self, prompt: str, example: Mapping[str, Any], index: int) -> PredictionResult:
+        raise NotImplementedError
 
     def _load_dataset(self) -> Dataset:
         loader = DatasetLoader(
@@ -203,6 +228,45 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             dataset = dataset.select(range(self.config.sample_size))
         self._log_label_distribution(dataset)
         return dataset
+
+    def _label_name(self, label: int | None) -> str | None:
+        if label is None:
+            return None
+        if self._label_names and 0 <= label < len(self._label_names):
+            return self._label_names[label]
+        return str(label)
+
+    @staticmethod
+    def _example_identifier(example: Mapping[str, Any], index: int) -> str:
+        identifier = example.get("id") if isinstance(example, Mapping) else None
+        if identifier is not None and identifier != "":
+            return str(identifier)
+        return f"#{index}"
+
+    def _compute_metrics(
+        self,
+        actual: Iterable[int],
+        predicted: Iterable[int],
+        *,
+        total_examples: int,
+        withdrawn_examples: int,
+        skipped_examples: int,
+    ) -> Dict[str, float | int]:
+        predicted_list = list(predicted)
+        actual_list = list(actual)
+        if predicted_list:
+            metrics: Dict[str, float | int] = self._compute_label_metrics(actual_list, predicted_list)
+        else:
+            metrics = self._empty_label_metrics()
+        metrics.update(
+            self._run_summary_metrics(
+                total_examples=total_examples,
+                withdrawn_examples=withdrawn_examples,
+                skipped_examples=skipped_examples,
+                evaluated_examples=len(predicted_list),
+            )
+        )
+        return metrics
 
     def _apply_label_scheme(self, dataset: Dataset) -> Dataset:
         cache_path = self._cache_path()
@@ -280,7 +344,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         return int(match.group(1))
 
     @staticmethod
-    def _compute_metrics(actual: Iterable[int], predicted: Iterable[int]) -> Dict[str, float]:
+    def _compute_label_metrics(actual: Iterable[int], predicted: Iterable[int]) -> Dict[str, float]:
         actual_list = list(actual)
         predicted_list = list(predicted)
         kappa = cohen_kappa_score(actual_list, predicted_list)
@@ -306,13 +370,213 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         }
 
     @staticmethod
-    def _empty_metrics() -> Dict[str, float]:
+    def _empty_label_metrics() -> Dict[str, float]:
         return {
             "cohen_kappa": float("nan"),
             "accuracy": float("nan"),
             "pearson_correlation": float("nan"),
             "spearman_correlation": float("nan"),
         }
+
+    @staticmethod
+    def _run_summary_metrics(
+        *,
+        total_examples: int,
+        withdrawn_examples: int,
+        skipped_examples: int,
+        evaluated_examples: int,
+    ) -> Dict[str, float | int]:
+        withdraw_rate = (
+            withdrawn_examples / total_examples if total_examples else float("nan")
+        )
+        coverage = (
+            evaluated_examples / total_examples if total_examples else float("nan")
+        )
+        return {
+            "total_examples": total_examples,
+            "evaluated_examples": evaluated_examples,
+            "withdrawn_examples": withdrawn_examples,
+            "withdraw_rate": withdraw_rate,
+            "skipped_examples": skipped_examples,
+            "coverage": coverage,
+        }
+
+    @staticmethod
+    def _empty_metrics() -> Dict[str, float | int]:
+        metrics: Dict[str, float | int] = SciEntsBankGradingExperiment._empty_label_metrics()
+        metrics.update(
+            {
+                "total_examples": 0,
+                "evaluated_examples": 0,
+                "withdrawn_examples": 0,
+                "withdraw_rate": float("nan"),
+                "skipped_examples": 0,
+                "coverage": float("nan"),
+            }
+        )
+        return metrics
+
+
+class SciEntsBankKappaExperiment(SciEntsBankGradingExperiment):
+    """Run an LLM grading experiment on the SciEntsBank dataset."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        label_scheme: str = "5way",
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+    ) -> None:
+        scheme = LABEL_SCHEMES.get(label_scheme)
+        if scheme is None:
+            valid = ", ".join(sorted(LABEL_SCHEMES))
+            raise ValueError(f"Unknown label scheme '{label_scheme}'. Valid options: {valid}")
+        super().__init__(
+            name=f"scientsbank_kappa_{scheme.key}",
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme=scheme.key,
+            run_name=run_name,
+            config=config,
+        )
+
+    def _predict_example(
+        self,
+        prompt: str,
+        example: Mapping[str, Any],
+        index: int,
+    ) -> PredictionResult:
+        response = self.llm_client.generate(prompt)
+        raw_label = self._extract_label(response)
+        identifier = self._example_identifier(example, index)
+
+        if raw_label is None:
+            reason = f"Skipping example {identifier} due to unparseable response: {response}"
+            return PredictionResult(
+                predicted_label=None,
+                raw_labels=[None],
+                responses=[response],
+                withdrawn=False,
+                reason=reason,
+            )
+
+        predicted_label = self._normalize_prediction(raw_label)
+        if predicted_label is None:
+            reason = (
+                f"Skipping example {identifier} due to unsupported label {raw_label} "
+                f"for {self.scheme.display_name} scheme"
+            )
+            return PredictionResult(
+                predicted_label=None,
+                raw_labels=[raw_label],
+                responses=[response],
+                withdrawn=False,
+                reason=reason,
+            )
+
+        return PredictionResult(
+            predicted_label=predicted_label,
+            raw_labels=[raw_label],
+            responses=[response],
+            withdrawn=False,
+        )
+
+
+class SciEntsBankConsensusExperiment(SciEntsBankGradingExperiment):
+    """Run multiple LLM passes and keep only high-agreement predictions."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        label_scheme: str = "5way",
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        num_runs: int = 3,
+        agreement_threshold: float = 0.66,
+    ) -> None:
+        if num_runs <= 0:
+            raise ValueError("num_runs must be positive for consensus experiments")
+        if not (0 < agreement_threshold <= 1):
+            raise ValueError("agreement_threshold must be in the interval (0, 1]")
+        scheme = LABEL_SCHEMES.get(label_scheme)
+        if scheme is None:
+            valid = ", ".join(sorted(LABEL_SCHEMES))
+            raise ValueError(f"Unknown label scheme '{label_scheme}'. Valid options: {valid}")
+        super().__init__(
+            name=f"scientsbank_consensus_{scheme.key}",
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme=scheme.key,
+            run_name=run_name,
+            config=config,
+        )
+        self.num_runs = num_runs
+        self.agreement_threshold = agreement_threshold
+
+    def _predict_example(
+        self,
+        prompt: str,
+        example: Mapping[str, Any],
+        index: int,
+    ) -> PredictionResult:
+        responses: List[str] = []
+        raw_labels: List[int | None] = []
+        normalized_labels: List[int | None] = []
+
+        for _ in range(self.num_runs):
+            response = self.llm_client.generate(prompt)
+            responses.append(response)
+            raw_label = self._extract_label(response)
+            raw_labels.append(raw_label)
+            normalized_labels.append(self._normalize_prediction(raw_label) if raw_label is not None else None)
+
+        identifier = self._example_identifier(example, index)
+        vote_counts = Counter(label for label in normalized_labels if label is not None)
+        majority_label: int | None = None
+        majority_count = 0
+        if vote_counts:
+            majority_label, majority_count = max(
+                vote_counts.items(), key=lambda item: (item[1], -item[0])
+            )
+
+        agreement_ratio = majority_count / self.num_runs
+        details: Dict[str, Any] = {
+            "consensus_votes": dict(vote_counts),
+            "consensus_ratio": agreement_ratio,
+            "consensus_runs": self.num_runs,
+            "consensus_threshold": self.agreement_threshold,
+        }
+
+        if majority_label is not None and agreement_ratio >= self.agreement_threshold:
+            return PredictionResult(
+                predicted_label=majority_label,
+                raw_labels=raw_labels,
+                responses=responses,
+                withdrawn=False,
+                details=details,
+            )
+
+        if not vote_counts:
+            reason = (
+                f"Withdrawing example {identifier} due to no valid predictions across {self.num_runs} runs."
+            )
+        else:
+            reason = (
+                f"Withdrawing example {identifier}: max agreement {agreement_ratio:.2f} "
+                f"below threshold {self.agreement_threshold:.2f}."
+            )
+        return PredictionResult(
+            predicted_label=None,
+            raw_labels=raw_labels,
+            responses=responses,
+            withdrawn=True,
+            reason=reason,
+            details=details,
+        )
 
 
 class SciEntsBankKappa3WayExperiment(SciEntsBankKappaExperiment):
