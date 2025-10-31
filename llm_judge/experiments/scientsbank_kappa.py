@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Mapping as ABCMapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
@@ -82,6 +83,30 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
 }
 
 
+@dataclass
+class PredictionOutcome:
+    """Outcome of grading a single example."""
+
+    raw_label: int | None
+    predicted_label: int | None
+    withdrawn: bool = False
+    details: Dict[str, object] | None = None
+
+
+@dataclass
+class ConsensusGradingConfig:
+    """Configuration for consensus-based grading."""
+
+    runs: int = 3
+    agreement_threshold: float = 0.67
+
+    def __post_init__(self) -> None:
+        if self.runs < 1:
+            raise ValueError("Consensus runs must be at least 1")
+        if not 0 <= self.agreement_threshold <= 1:
+            raise ValueError("Consensus agreement threshold must be between 0 and 1")
+
+
 class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
     """Run an LLM grading experiment on the SciEntsBank dataset."""
 
@@ -120,6 +145,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         actual_labels: List[int] = []
         predicted_labels: List[int] = []
         skipped = 0
+        withdrawn = 0
 
         label_feature = dataset.features.get("label")
         label_lookup = label_feature.int2str if isinstance(label_feature, ClassLabel) else lambda idx: str(idx)
@@ -137,27 +163,20 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 student_answer=example["student_answer"],
                 score_instruction=score_instruction,
             ).to_prompt()
-            response = self.llm_client.generate(prompt)
-            raw_label = self._extract_label(response)
-            if raw_label is None:
+            outcome = self._grade_example(prompt, example)
+            if outcome.raw_label is None and not outcome.withdrawn and outcome.predicted_label is None:
                 skipped += 1
-                self.log(f"Skipping example {example['id']} due to unparseable response: {response}")
                 continue
 
-            predicted_label = self._normalize_prediction(raw_label)
-            if predicted_label is None:
-                skipped += 1
-                self.log(
-                    f"Skipping example {example['id']} due to unsupported label {raw_label} for "
-                    f"{self.scheme.display_name} scheme"
-                )
-                continue
+            if outcome.withdrawn:
+                withdrawn += 1
 
             gold_label = int(example["label"])
-            actual_labels.append(gold_label)
-            predicted_labels.append(predicted_label)
+            if outcome.predicted_label is not None and not outcome.withdrawn:
+                actual_labels.append(gold_label)
+                predicted_labels.append(outcome.predicted_label)
 
-            record = {
+            record: Dict[str, object] = {
                 "sample_index": index,
                 "total_samples": len(dataset),
                 "label_scheme": self.scheme.display_name,
@@ -167,27 +186,87 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 "student_answer": example.get("student_answer"),
                 "gold_label_id": gold_label,
                 "gold_label_name": label_lookup(gold_label),
-                "raw_predicted_label": raw_label,
-                "predicted_label_id": predicted_label,
-                "predicted_label_name": self._label_names[predicted_label]
-                if self._label_names
-                else str(predicted_label),
-                "prediction_matches": predicted_label == gold_label,
-                "llm_response": response,
+                "withdrawn": outcome.withdrawn,
+                "raw_predicted_label": outcome.raw_label,
                 "score_instruction": score_instruction,
             }
+            if outcome.predicted_label is not None:
+                record.update(
+                    {
+                        "predicted_label_id": outcome.predicted_label,
+                        "predicted_label_name": self._label_names[outcome.predicted_label]
+                        if self._label_names
+                        else str(outcome.predicted_label),
+                        "prediction_matches": outcome.predicted_label == gold_label,
+                    }
+                )
+            else:
+                record.update(
+                    {
+                        "predicted_label_id": None,
+                        "predicted_label_name": None,
+                        "prediction_matches": None,
+                    }
+                )
+
+            if outcome.details:
+                record.update(outcome.details)
+
             self.log_record(record)
 
         if skipped:
             self.log(f"Skipped {skipped} example(s) due to parsing issues.")
+        if withdrawn:
+            self.log(f"Withdrew {withdrawn} example(s) due to insufficient agreement.")
 
         if not predicted_labels:
-            return self._empty_metrics()
+            metrics = self._empty_metrics()
+        else:
+            metrics = self._compute_metrics(actual_labels, predicted_labels)
+        total_examples = len(dataset)
+        eligible_examples = total_examples - skipped
+        withdraw_rate = (
+            withdrawn / eligible_examples if eligible_examples > 0 else float("nan")
+        )
+        metrics.update(
+            {
+                "total_examples": total_examples,
+                "eligible_examples": eligible_examples,
+                "graded_examples": len(predicted_labels),
+                "withdrawn_examples": withdrawn,
+                "withdraw_rate": withdraw_rate,
+                "skipped_examples": skipped,
+            }
+        )
 
-        metrics = self._compute_metrics(actual_labels, predicted_labels)
         for name, value in metrics.items():
             self.log(f"{name}: {value}")
         return metrics
+
+    def _grade_example(
+        self, prompt: str, example: ABCMapping[str, object]
+    ) -> PredictionOutcome:
+        response = self.llm_client.generate(prompt)
+        raw_label = self._extract_label(response)
+        if raw_label is None:
+            self.log(
+                f"Skipping example {example.get('id')} due to unparseable response: {response}"
+            )
+            return PredictionOutcome(raw_label=None, predicted_label=None)
+
+        predicted_label = self._normalize_prediction(raw_label)
+        if predicted_label is None:
+            self.log(
+                f"Skipping example {example.get('id')} due to unsupported label {raw_label} "
+                f"for {self.scheme.display_name} scheme"
+            )
+            return PredictionOutcome(raw_label=None, predicted_label=None)
+
+        return PredictionOutcome(
+            raw_label=raw_label,
+            predicted_label=predicted_label,
+            details={"llm_response": response},
+        )
 
     def _load_dataset(self) -> Dataset:
         loader = DatasetLoader(
@@ -352,4 +431,141 @@ class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
             label_scheme="2way",
             run_name=run_name,
             config=config,
+        )
+
+
+class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
+    """SciEntsBank experiment requiring consensus across multiple LLM runs."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        label_scheme: str = "5way",
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        consensus: ConsensusGradingConfig | None = None,
+    ) -> None:
+        super().__init__(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme=label_scheme,
+            run_name=run_name,
+            config=config,
+        )
+        self.consensus = consensus or ConsensusGradingConfig()
+
+    def _grade_example(
+        self, prompt: str, example: ABCMapping[str, object]
+    ) -> PredictionOutcome:
+        responses: List[str] = []
+        vote_counts: Counter[int] = Counter()
+        total_runs = self.consensus.runs
+
+        for _ in range(total_runs):
+            response = self.llm_client.generate(prompt)
+            responses.append(response)
+            raw_label = self._extract_label(response)
+            if raw_label is None:
+                continue
+            normalized = self._normalize_prediction(raw_label)
+            if normalized is None:
+                continue
+            vote_counts[normalized] += 1
+
+        if not vote_counts:
+            self.log(
+                f"Withdrawing example {example.get('id')} due to missing parseable responses."
+            )
+            combined_response = "\n\n".join(responses)
+            return PredictionOutcome(
+                raw_label=None,
+                predicted_label=None,
+                withdrawn=True,
+                details={
+                    "llm_response": combined_response,
+                    "llm_responses": responses,
+                    "consensus_votes": {},
+                    "consensus_runs": total_runs,
+                    "agreement_ratio": 0.0,
+                    "consensus_threshold": self.consensus.agreement_threshold,
+                },
+            )
+
+        best_label, best_count = max(vote_counts.items(), key=lambda item: item[1])
+        agreement_ratio = best_count / total_runs
+        reached = agreement_ratio >= self.consensus.agreement_threshold
+
+        combined_response = "\n\n".join(responses)
+        details: Dict[str, object] = {
+            "llm_response": combined_response,
+            "llm_responses": responses,
+            "consensus_votes": dict(vote_counts),
+            "consensus_runs": total_runs,
+            "agreement_ratio": agreement_ratio,
+            "consensus_threshold": self.consensus.agreement_threshold,
+        }
+
+        if not reached:
+            self.log(
+                f"Withdrawing example {example.get('id')} due to agreement ratio "
+                f"{agreement_ratio:.2f} below threshold {self.consensus.agreement_threshold:.2f}."
+            )
+            return PredictionOutcome(
+                raw_label=best_label,
+                predicted_label=None,
+                withdrawn=True,
+                details=details,
+            )
+
+        return PredictionOutcome(
+            raw_label=best_label,
+            predicted_label=best_label,
+            withdrawn=False,
+            details=details,
+        )
+
+
+class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
+    """Consensus SciEntsBank experiment using the 3-way label scheme."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        consensus: ConsensusGradingConfig | None = None,
+    ) -> None:
+        super().__init__(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme="3way",
+            run_name=run_name,
+            config=config,
+            consensus=consensus,
+        )
+
+
+class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
+    """Consensus SciEntsBank experiment using the 2-way label scheme."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        consensus: ConsensusGradingConfig | None = None,
+    ) -> None:
+        super().__init__(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme="2way",
+            run_name=run_name,
+            config=config,
+            consensus=consensus,
         )

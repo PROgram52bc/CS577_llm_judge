@@ -2,7 +2,11 @@
 
 from .scientsbank_kappa import (
     LABEL_SCHEMES,
+    ConsensusGradingConfig,
     SciEntsBankExperimentConfig,
+    SciEntsBankConsensus2WayExperiment,
+    SciEntsBankConsensus3WayExperiment,
+    SciEntsBankConsensusExperiment,
     SciEntsBankKappa2WayExperiment,
     SciEntsBankKappa3WayExperiment,
     SciEntsBankKappaExperiment,
@@ -10,8 +14,12 @@ from .scientsbank_kappa import (
 
 __all__ = [
     "LABEL_SCHEMES",
+    "ConsensusGradingConfig",
     "SciEntsBankExperimentConfig",
     "SciEntsBankKappaExperiment",
     "SciEntsBankKappa3WayExperiment",
     "SciEntsBankKappa2WayExperiment",
+    "SciEntsBankConsensusExperiment",
+    "SciEntsBankConsensus3WayExperiment",
+    "SciEntsBankConsensus2WayExperiment",
 ]

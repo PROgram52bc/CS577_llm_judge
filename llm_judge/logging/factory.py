@@ -103,6 +103,7 @@ class ExperimentRunLogger:
             ("acc", metrics.get("accuracy")),
             ("pr", metrics.get("pearson_correlation")),
             ("sr", metrics.get("spearman_correlation")),
+            ("wd", metrics.get("withdraw_rate")),
         ]
 
         parts: list[str] = []
