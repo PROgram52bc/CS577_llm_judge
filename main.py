@@ -121,6 +121,7 @@ def main() -> None:
             config=config,
         )
         metrics = experiment.run()
+        experiment.finalize_logs(metrics)
         print(f"Results for {LABEL_SCHEMES[scheme].display_name} ({experiment.name}):")
         for name, value in metrics.items():
             print(f"  {name.replace('_', ' ').title()}: {value}")
