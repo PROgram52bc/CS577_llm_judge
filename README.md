@@ -2,11 +2,24 @@
 
 This repository hosts a lightweight evaluation harness for comparing large language models as automatic graders. The current focus is a SciEntsBank-based experiment that asks an LLM to score short-answer responses and then compares those scores against ground-truth labels using a suite of correlation metrics.
 
-## Current status
+## Experiments
 
-- **Experiment**: `SciEntsBankKappaExperiment` loads a sample from the public SciEntsBank dataset, prompts an LLM to grade each example, and computes Cohen's kappa, accuracy, Pearson correlation, and Spearman correlation.
-- **LLM clients**: Select between a deterministic mock grader, OpenAI-compatible APIs, Purdue's RCAC GenAI endpoint, a local Hugging Face transformers pipeline, or a local Ollama runtime.
-- **Logging**: Structured run logs can be emitted as newline-delimited JSON, CSV, and/or plain-text. JSON and CSV outputs are enabled by default.
+Two SciEntsBank-based experiments share the same dataset loading and logging infrastructure:
+
+- **Single-pass kappa (`--experiment single`)** – runs `SciEntsBankKappaExperiment`, which issues one LLM grading call per sample and reports Cohen's kappa, accuracy, Pearson correlation, and Spearman correlation across the selected label schemes.
+- **Consensus grading (`--experiment consensus`)** – runs `SciEntsBankConsensusExperiment`, which performs *N* independent LLM calls (configurable via `--consensus-runs`). Predictions are only kept when at least the configured proportion of runs agree (`--consensus-threshold`). Samples without sufficient agreement are marked as `withdrawn` in the per-example logs, excluded from accuracy and correlation metrics, and summarized through additional metrics such as `withdrawn_examples` and `withdraw_rate`.
+
+Both experiments emit the same structured logging outputs (JSON, CSV, and/or text) with per-sample metadata and summary metrics at the end of the run.
+
+## LLM clients and models
+
+- **Mock** – deterministic label generator for testing the harness end-to-end.
+- **OpenAI-compatible** – specify `--model-name` (for example `gpt-4o-mini`).
+- **RCAC GenAI** – select Purdue's hosted models via `--rcac-model` or `--model-name`. Available shortcuts include `llama3.1:latest`, `llama4:latest`, `qwen2.5:72b`, and `gpt-oss:120b`.
+- **Local transformers pipeline** – run Hugging Face models with `--llm-backend local-pipeline` and provide `--model-name` and `--pipeline-task`.
+- **Ollama** – evaluate models served by a local Ollama runtime.
+
+Structured run logs include a `withdrawn` field whenever the consensus experiment suppresses an answer and still capture all raw model outputs via the `llm_response`/`llm_responses` fields.
 
 ## Installation
 
@@ -28,14 +41,15 @@ source env.local.sh
 
 `OpenAIClient` reads `OPENAI_API_KEY`, while `RCACGenAIClient` reads `RCAC_GENAI_API_KEY`. You can also provide the key explicitly via the `--api-key` command-line flag.
 
-## Running the SciEntsBank experiment
+## Running the SciEntsBank experiments
 
-The CLI exposes options for the sample size, logging configuration, and backend selection. JSON and CSV logs are generated in the target directory by default.
+The CLI exposes options for the sample size, logging configuration, backend selection, and experiment strategy. JSON and CSV logs are generated in the target directory by default.
 
 ```bash
 python main.py \
     --sample-size 25 \
     --llm-backend mock \
+    --experiment single \
     --log-dir logs
 ```
 
@@ -45,6 +59,9 @@ To run against a remote provider (using environment variables for credentials):
 python main.py \
     --llm-backend openai \
     --model-name gpt-4o-mini \
+    --experiment consensus \
+    --consensus-runs 5 \
+    --consensus-threshold 0.8 \
     --sample-size 50
 ```
 

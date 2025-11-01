@@ -7,6 +7,10 @@ from pathlib import Path
 
 from llm_judge.experiments.scientsbank_kappa import (
     LABEL_SCHEMES,
+    ConsensusGradingConfig,
+    SciEntsBankConsensus2WayExperiment,
+    SciEntsBankConsensus3WayExperiment,
+    SciEntsBankConsensusExperiment,
     SciEntsBankExperimentConfig,
     SciEntsBankKappa2WayExperiment,
     SciEntsBankKappa3WayExperiment,
@@ -20,6 +24,13 @@ from llm_judge.llms import (
     OllamaClient,
     OpenAIClient,
     RCACGenAIClient,
+)
+
+RCAC_AVAILABLE_MODELS = (
+    "llama3.1:latest",
+    "llama4:latest",
+    "qwen2.5:72b",
+    "gpt-oss:120b",
 )
 
 
@@ -40,6 +51,15 @@ def parse_args() -> argparse.Namespace:
         help="Log format to use (can be provided multiple times). Defaults to JSON and CSV.",
     )
     parser.add_argument(
+        "--experiment",
+        choices=["single", "consensus"],
+        default="single",
+        help=(
+            "Experiment variant to run. 'single' issues one LLM call per sample while "
+            "'consensus' requires agreement across multiple runs."
+        ),
+    )
+    parser.add_argument(
         "--llm-backend",
         choices=["mock", "openai", "rcac", "local-pipeline", "ollama"],
         default="mock",
@@ -56,6 +76,12 @@ def parse_args() -> argparse.Namespace:
         help=(
             "API key for remote backends. If not provided, the backend-specific environment variable is used."
         ),
+    )
+    parser.add_argument(
+        "--rcac-model",
+        choices=RCAC_AVAILABLE_MODELS,
+        default=None,
+        help="Shortcut for selecting Purdue RCAC GenAI models.",
     )
     parser.add_argument(
         "--rcac-base-url",
@@ -92,6 +118,22 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional directory to cache converted datasets (e.g., 3-way and 2-way).",
     )
+    parser.add_argument(
+        "--consensus-runs",
+        type=int,
+        default=3,
+        help=(
+            "Number of independent LLM runs when using the consensus experiment."
+        ),
+    )
+    parser.add_argument(
+        "--consensus-threshold",
+        type=float,
+        default=0.67,
+        help=(
+            "Minimum agreement ratio (0-1) required to keep a prediction in the consensus experiment."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -111,6 +153,18 @@ def main() -> None:
         "3way": SciEntsBankKappa3WayExperiment,
         "2way": SciEntsBankKappa2WayExperiment,
     }
+    extra_kwargs: dict[str, object] = {}
+    if args.experiment == "consensus":
+        consensus_config = ConsensusGradingConfig(
+            runs=args.consensus_runs,
+            agreement_threshold=args.consensus_threshold,
+        )
+        experiment_classes = {
+            "5way": SciEntsBankConsensusExperiment,
+            "3way": SciEntsBankConsensus3WayExperiment,
+            "2way": SciEntsBankConsensus2WayExperiment,
+        }
+        extra_kwargs["consensus"] = consensus_config
 
     for scheme in schemes:
         experiment_cls = experiment_classes[scheme]
@@ -119,6 +173,7 @@ def main() -> None:
             logger_factory=logger_factory,
             run_name=run_identifier,
             config=config,
+            **extra_kwargs,
         )
         metrics = experiment.run()
         experiment.finalize_logs(metrics)
@@ -138,7 +193,7 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
         model_name = args.model_name or "gpt-3.5-turbo"
         return OpenAIClient(model=model_name, api_key=args.api_key)
     if backend == "rcac":
-        model_name = args.model_name or "llama3.1:latest"
+        model_name = args.model_name or args.rcac_model or RCAC_AVAILABLE_MODELS[0]
         return RCACGenAIClient(
             model=model_name,
             api_key=args.api_key,
@@ -156,9 +211,13 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
 
 
 def build_run_identifier(args: argparse.Namespace) -> str:
-    parts = [args.llm_backend]
+    parts = [args.experiment, args.llm_backend]
     if args.model_name:
         sanitized = re.sub(r"[^0-9A-Za-z._-]+", "-", args.model_name)
+        sanitized = sanitized.strip("-_") or "model"
+        parts.append(sanitized)
+    elif args.llm_backend == "rcac" and args.rcac_model:
+        sanitized = re.sub(r"[^0-9A-Za-z._-]+", "-", args.rcac_model)
         sanitized = sanitized.strip("-_") or "model"
         parts.append(sanitized)
     return "_".join(parts)
