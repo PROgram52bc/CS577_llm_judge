@@ -38,6 +38,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run LLM judge experiments")
     parser.add_argument("--sample-size", type=int, default=10, help="Number of examples to grade")
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1,
+        help="Number of examples to combine into a single LLM request.",
+    )
+    parser.add_argument(
         "--log-dir",
         type=Path,
         default=Path("logs"),
@@ -146,6 +152,7 @@ def main() -> None:
     config = SciEntsBankExperimentConfig(
         sample_size=args.sample_size,
         processed_cache_dir=args.processed_cache_dir,
+        batch_size=args.batch_size,
     )
 
     experiment_classes = {
