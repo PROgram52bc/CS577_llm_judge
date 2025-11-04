@@ -1,5 +1,6 @@
 """Experiment exports."""
 
+from .csv_grading import CSVExperimentConfig, CSVGradingExperiment
 from .scientsbank_kappa import (
     LABEL_SCHEMES,
     ConsensusGradingConfig,
@@ -13,6 +14,8 @@ from .scientsbank_kappa import (
 )
 
 __all__ = [
+    "CSVExperimentConfig",
+    "CSVGradingExperiment",
     "LABEL_SCHEMES",
     "ConsensusGradingConfig",
     "SciEntsBankExperimentConfig",

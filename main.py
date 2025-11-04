@@ -5,7 +5,9 @@ import argparse
 import re
 from pathlib import Path
 
-from llm_judge.experiments.scientsbank_kappa import (
+from llm_judge.experiments import (
+    CSVExperimentConfig,
+    CSVGradingExperiment,
     LABEL_SCHEMES,
     ConsensusGradingConfig,
     SciEntsBankConsensus2WayExperiment,
@@ -48,6 +50,24 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("logs"),
         help="Directory to write experiment logs",
+    )
+    parser.add_argument(
+        "--csv-input",
+        type=Path,
+        default=None,
+        help="Path to a CSV file containing grading data.",
+    )
+    parser.add_argument(
+        "--csv-output-dir",
+        type=Path,
+        default=None,
+        help="Directory where graded CSV outputs should be written (defaults to log dir).",
+    )
+    parser.add_argument(
+        "--csv-sample-size",
+        type=int,
+        default=None,
+        help="Override sample size for CSV grading (defaults to --sample-size if provided).",
     )
     parser.add_argument(
         "--log-format",
@@ -148,6 +168,36 @@ def main() -> None:
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
     run_identifier = build_run_identifier(args)
+
+    if args.csv_input:
+        output_dir = args.csv_output_dir or args.log_dir
+        sample_size = args.csv_sample_size
+        csv_config = CSVExperimentConfig(
+            input_path=args.csv_input,
+            output_dir=output_dir,
+            sample_size=sample_size,
+            batch_size=args.batch_size,
+        )
+        consensus_config = None
+        if args.experiment == "consensus":
+            consensus_config = ConsensusGradingConfig(
+                runs=args.consensus_runs,
+                agreement_threshold=args.consensus_threshold,
+            )
+        experiment = CSVGradingExperiment(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            config=csv_config,
+            run_name=run_identifier,
+            consensus=consensus_config,
+        )
+        metrics = experiment.run()
+        experiment.finalize_logs(metrics)
+        print(f"Results for CSV grading ({experiment.name}):")
+        for name, value in metrics.items():
+            print(f"  {name.replace('_', ' ').title()}: {value}")
+        print()
+        return
     schemes = resolve_label_schemes(args.label_schemes)
     config = SciEntsBankExperimentConfig(
         sample_size=args.sample_size,
@@ -218,7 +268,8 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
 
 
 def build_run_identifier(args: argparse.Namespace) -> str:
-    parts = [args.experiment, args.llm_backend]
+    mode = "csv" if args.csv_input else args.experiment
+    parts = [mode, args.llm_backend]
     if args.model_name:
         sanitized = re.sub(r"[^0-9A-Za-z._-]+", "-", args.model_name)
         sanitized = sanitized.strip("-_") or "model"

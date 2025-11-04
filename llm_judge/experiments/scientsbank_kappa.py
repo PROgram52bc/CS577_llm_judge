@@ -16,6 +16,7 @@ from ..data.loaders import DatasetConfig, DatasetLoader
 from ..llms.base import LLMClient, PromptExample
 from ..logging.factory import ExperimentLoggerFactory
 from .base import Experiment
+from .common import BatchItemPrediction, ConsensusGradingConfig, PredictionOutcome
 
 
 SCORE_PATTERN = re.compile(r"(\d)")
@@ -87,39 +88,6 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
         cache_subdir="SciEntsBank_2way",
     ),
 }
-
-
-@dataclass
-class PredictionOutcome:
-    """Outcome of grading a single example."""
-
-    raw_label: int | None
-    predicted_label: int | None
-    withdrawn: bool = False
-    details: Dict[str, object] | None = None
-
-
-@dataclass
-class BatchItemPrediction:
-    """Container for parsed predictions within a batch response."""
-
-    index: int
-    raw_label: int | None
-    extracted_text: str | None
-
-
-@dataclass
-class ConsensusGradingConfig:
-    """Configuration for consensus-based grading."""
-
-    runs: int = 3
-    agreement_threshold: float = 0.67
-
-    def __post_init__(self) -> None:
-        if self.runs < 1:
-            raise ValueError("Consensus runs must be at least 1")
-        if not 0 <= self.agreement_threshold <= 1:
-            raise ValueError("Consensus agreement threshold must be between 0 and 1")
 
 
 class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
