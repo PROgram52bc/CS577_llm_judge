@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Mapping as ABCMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from datasets import ClassLabel, Dataset
 from scipy.stats import pearsonr, spearmanr
@@ -19,6 +19,7 @@ from .base import Experiment
 
 
 SCORE_PATTERN = re.compile(r"(\d)")
+ITEM_SCORE_PATTERN = re.compile(r"Item\s*(\d+)\s*:?\s*Score\s*: ?(-?\d+)", re.IGNORECASE)
 
 
 @dataclass
@@ -29,6 +30,11 @@ class SciEntsBankExperimentConfig:
     split: str = "train"
     dataset_name: str = "nkazi/SciEntsBank"
     processed_cache_dir: Optional[Path] = None
+    batch_size: int = 1
+
+    def __post_init__(self) -> None:
+        if self.batch_size < 1:
+            raise ValueError("batch_size must be at least 1")
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,15 @@ class PredictionOutcome:
 
 
 @dataclass
+class BatchItemPrediction:
+    """Container for parsed predictions within a batch response."""
+
+    index: int
+    raw_label: int | None
+    extracted_text: str | None
+
+
+@dataclass
 class ConsensusGradingConfig:
     """Configuration for consensus-based grading."""
 
@@ -123,9 +138,12 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         if scheme is None:
             valid = ", ".join(sorted(LABEL_SCHEMES))
             raise ValueError(f"Unknown label scheme '{label_scheme}'. Valid options: {valid}")
-        super().__init__(f"scientsbank_kappa_{scheme.key}", logger_factory, run_name=run_name)
-        self.llm_client = llm_client
         self.config = config or SciEntsBankExperimentConfig()
+        name = f"scientsbank_kappa_{scheme.key}"
+        if self.config.batch_size > 1:
+            name = f"{name}_batch{self.config.batch_size}"
+        super().__init__(name, logger_factory, run_name=run_name)
+        self.llm_client = llm_client
         self.scheme = scheme
         self._label_names: Sequence[str] | None = None
 
@@ -150,69 +168,72 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         label_feature = dataset.features.get("label")
         label_lookup = label_feature.int2str if isinstance(label_feature, ClassLabel) else lambda idx: str(idx)
 
-        progress_iter = self.progress(
-            dataset,
-            total=len(dataset),
-            description=f"{self.scheme.display_name} grading",
-        )
+        batch_size = max(1, self.config.batch_size)
 
-        for index, example in enumerate(progress_iter, start=1):
-            prompt = PromptExample(
-                instruction=example["question"],
-                reference_answer=example["reference_answer"],
-                student_answer=example["student_answer"],
-                score_instruction=score_instruction,
-            ).to_prompt()
-            outcome = self._grade_example(prompt, example)
-            if outcome.raw_label is None and not outcome.withdrawn and outcome.predicted_label is None:
-                skipped += 1
-                continue
+        if batch_size == 1:
+            progress_iter = self.progress(
+                dataset,
+                total=len(dataset),
+                description=f"{self.scheme.display_name} grading",
+            )
 
-            if outcome.withdrawn:
-                withdrawn += 1
-
-            gold_label = int(example["label"])
-            if outcome.predicted_label is not None and not outcome.withdrawn:
-                actual_labels.append(gold_label)
-                predicted_labels.append(outcome.predicted_label)
-
-            record: Dict[str, object] = {
-                "sample_index": index,
-                "total_samples": len(dataset),
-                "label_scheme": self.scheme.display_name,
-                "id": example.get("id"),
-                "question": example.get("question"),
-                "reference_answer": example.get("reference_answer"),
-                "student_answer": example.get("student_answer"),
-                "gold_label_id": gold_label,
-                "gold_label_name": label_lookup(gold_label),
-                "withdrawn": outcome.withdrawn,
-                "raw_predicted_label": outcome.raw_label,
-                "score_instruction": score_instruction,
-            }
-            if outcome.predicted_label is not None:
-                record.update(
-                    {
-                        "predicted_label_id": outcome.predicted_label,
-                        "predicted_label_name": self._label_names[outcome.predicted_label]
-                        if self._label_names
-                        else str(outcome.predicted_label),
-                        "prediction_matches": outcome.predicted_label == gold_label,
-                    }
+            for index, example in enumerate(progress_iter, start=1):
+                prompt = PromptExample(
+                    instruction=example["question"],
+                    reference_answer=example["reference_answer"],
+                    student_answer=example["student_answer"],
+                    score_instruction=score_instruction,
+                ).to_prompt()
+                outcome = self._grade_example(prompt, example)
+                skipped, withdrawn = self._handle_outcome(
+                    outcome,
+                    example,
+                    index,
+                    len(dataset),
+                    label_lookup,
+                    score_instruction,
+                    actual_labels,
+                    predicted_labels,
+                    skipped,
+                    withdrawn,
                 )
-            else:
-                record.update(
-                    {
-                        "predicted_label_id": None,
-                        "predicted_label_name": None,
-                        "prediction_matches": None,
-                    }
-                )
+        else:
+            progress_iter = self.progress(
+                dataset,
+                total=len(dataset),
+                description=f"{self.scheme.display_name} grading (batched)",
+            )
+            current_batch: List[ABCMapping[str, object]] = []
+            batch_indices: List[int] = []
 
-            if outcome.details:
-                record.update(outcome.details)
+            for index, example in enumerate(progress_iter, start=1):
+                current_batch.append(example)
+                batch_indices.append(index)
 
-            self.log_record(record)
+                is_last = len(current_batch) == batch_size or index == len(dataset)
+                if not is_last:
+                    continue
+
+                prompt = self._build_batch_prompt(current_batch, score_instruction)
+                outcomes = self._grade_batch(prompt, current_batch, batch_indices)
+                for batch_idx, (batched_example, outcome) in enumerate(
+                    zip(current_batch, outcomes)
+                ):
+                    skipped, withdrawn = self._handle_outcome(
+                        outcome,
+                        batched_example,
+                        batch_indices[batch_idx],
+                        len(dataset),
+                        label_lookup,
+                        score_instruction,
+                        actual_labels,
+                        predicted_labels,
+                        skipped,
+                        withdrawn,
+                    )
+
+                current_batch = []
+                batch_indices = []
 
         if skipped:
             self.log(f"Skipped {skipped} example(s) due to parsing issues.")
@@ -267,6 +288,138 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             predicted_label=predicted_label,
             details={"llm_response": response},
         )
+
+    def _grade_batch(
+        self,
+        prompt: str,
+        examples: Sequence[ABCMapping[str, object]],
+        indices: Sequence[int],
+    ) -> List[PredictionOutcome]:
+        response = self.llm_client.generate(prompt)
+        parsed = self._extract_batch_predictions(response, len(examples))
+        outcomes: List[PredictionOutcome] = []
+        for position, (example, sample_index) in enumerate(zip(examples, indices)):
+            parsed_item = parsed[position]
+            details: Dict[str, object] = {"llm_response": response}
+            raw_label = parsed_item.raw_label
+            if raw_label is None:
+                self.log(
+                    "Skipping example {id} (sample {sample}) at batch position {pos} due to "
+                    "unparseable response in batch.".format(
+                        id=example.get("id"),
+                        sample=sample_index,
+                        pos=parsed_item.index,
+                    )
+                )
+                outcomes.append(
+                    PredictionOutcome(
+                        raw_label=None,
+                        predicted_label=None,
+                        withdrawn=False,
+                        details=details,
+                    )
+                )
+                continue
+
+            predicted_label = self._normalize_prediction(raw_label)
+            if predicted_label is None:
+                self.log(
+                    "Skipping example {id} (sample {sample}) at batch position {pos} due to unsupported label {label} "
+                    "for {scheme}.".format(
+                        id=example.get("id"),
+                        sample=sample_index,
+                        pos=parsed_item.index,
+                        label=raw_label,
+                        scheme=self.scheme.display_name,
+                    )
+                )
+                outcomes.append(
+                    PredictionOutcome(
+                        raw_label=None,
+                        predicted_label=None,
+                        withdrawn=False,
+                        details=details,
+                    )
+                )
+                continue
+
+            outcomes.append(
+                PredictionOutcome(
+                    raw_label=raw_label,
+                    predicted_label=predicted_label,
+                    withdrawn=False,
+                    details=details,
+                )
+            )
+        return outcomes
+
+    def _handle_outcome(
+        self,
+        outcome: PredictionOutcome,
+        example: ABCMapping[str, object],
+        sample_index: int,
+        total_samples: int,
+        label_lookup: Callable[[int], str],
+        score_instruction: str,
+        actual_labels: List[int],
+        predicted_labels: List[int],
+        skipped: int,
+        withdrawn: int,
+    ) -> tuple[int, int]:
+        if (
+            outcome.raw_label is None
+            and not outcome.withdrawn
+            and outcome.predicted_label is None
+        ):
+            return skipped + 1, withdrawn
+
+        if outcome.withdrawn:
+            withdrawn += 1
+
+        gold_label = int(example["label"])
+        if outcome.predicted_label is not None and not outcome.withdrawn:
+            actual_labels.append(gold_label)
+            predicted_labels.append(outcome.predicted_label)
+
+        record: Dict[str, object] = {
+            "sample_index": sample_index,
+            "total_samples": total_samples,
+            "label_scheme": self.scheme.display_name,
+            "id": example.get("id"),
+            "question": example.get("question"),
+            "reference_answer": example.get("reference_answer"),
+            "student_answer": example.get("student_answer"),
+            "gold_label_id": gold_label,
+            "gold_label_name": label_lookup(gold_label),
+            "withdrawn": outcome.withdrawn,
+            "raw_predicted_label": outcome.raw_label,
+            "score_instruction": score_instruction,
+        }
+
+        if outcome.predicted_label is not None:
+            record.update(
+                {
+                    "predicted_label_id": outcome.predicted_label,
+                    "predicted_label_name": self._label_names[outcome.predicted_label]
+                    if self._label_names
+                    else str(outcome.predicted_label),
+                    "prediction_matches": outcome.predicted_label == gold_label,
+                }
+            )
+        else:
+            record.update(
+                {
+                    "predicted_label_id": None,
+                    "predicted_label_name": None,
+                    "prediction_matches": None,
+                }
+            )
+
+        if outcome.details:
+            record.update(outcome.details)
+
+        self.log_record(record)
+        return skipped, withdrawn
 
     def _load_dataset(self) -> Dataset:
         loader = DatasetLoader(
@@ -339,6 +492,33 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "Respond with 'Score: <label>' followed by a brief justification."
         )
 
+    def _build_batch_prompt(
+        self, examples: Sequence[ABCMapping[str, object]], score_instruction: str
+    ) -> str:
+        header_lines = [
+            "You are an expert grader.",
+            "Grade each student answer below independently.",
+            score_instruction,
+            "For each item, respond on its own line using exactly the format:",
+            "Item <n>: Score: <label> - <brief justification>",
+            "Use the item numbers exactly as provided below.",
+            "",
+        ]
+
+        example_lines: List[str] = []
+        for idx, example in enumerate(examples, start=1):
+            example_lines.extend(
+                [
+                    f"Item {idx}",
+                    f"Question: {example.get('question')}",
+                    f"Reference Answer: {example.get('reference_answer')}",
+                    f"Student Answer: {example.get('student_answer')}",
+                    "",
+                ]
+            )
+
+        return "\n".join(header_lines + example_lines)
+
     def _normalize_prediction(self, raw_label: int) -> int | None:
         if self.scheme.prediction_normalization:
             mapped = self.scheme.prediction_normalization.get(raw_label)
@@ -357,6 +537,36 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         if not match:
             return None
         return int(match.group(1))
+
+    @staticmethod
+    def _extract_batch_predictions(
+        response: str, expected_items: int
+    ) -> List[BatchItemPrediction]:
+        matches: Dict[int, BatchItemPrediction] = {}
+        for line in response.splitlines():
+            match = ITEM_SCORE_PATTERN.search(line)
+            if not match:
+                continue
+            try:
+                item_index = int(match.group(1))
+                label_value = int(match.group(2))
+            except ValueError:
+                continue
+            if item_index not in matches:
+                matches[item_index] = BatchItemPrediction(
+                    index=item_index, raw_label=label_value, extracted_text=line.strip()
+                )
+
+        predictions: List[BatchItemPrediction] = []
+        for item_number in range(1, expected_items + 1):
+            prediction = matches.get(item_number)
+            if prediction is None:
+                predictions.append(
+                    BatchItemPrediction(index=item_number, raw_label=None, extracted_text=None)
+                )
+            else:
+                predictions.append(prediction)
+        return predictions
 
     @staticmethod
     def _compute_metrics(actual: Iterable[int], predicted: Iterable[int]) -> Dict[str, float]:
@@ -525,6 +735,99 @@ class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
             withdrawn=False,
             details=details,
         )
+
+    def _grade_batch(
+        self,
+        prompt: str,
+        examples: Sequence[ABCMapping[str, object]],
+        indices: Sequence[int],
+    ) -> List[PredictionOutcome]:
+        total_runs = self.consensus.runs
+        responses: List[str] = []
+        parsed_runs: List[List[BatchItemPrediction]] = []
+
+        for _ in range(total_runs):
+            response = self.llm_client.generate(prompt)
+            responses.append(response)
+            parsed_runs.append(
+                self._extract_batch_predictions(response, len(examples))
+            )
+
+        combined_response = "\n\n".join(responses)
+        outcomes: List[PredictionOutcome] = []
+
+        for position, example in enumerate(examples):
+            vote_counts: Counter[int] = Counter()
+            for run_predictions in parsed_runs:
+                parsed_item = run_predictions[position]
+                raw_label = parsed_item.raw_label
+                if raw_label is None:
+                    continue
+                normalized = self._normalize_prediction(raw_label)
+                if normalized is None:
+                    continue
+                vote_counts[normalized] += 1
+
+            details: Dict[str, object] = {
+                "llm_response": combined_response,
+                "llm_responses": responses,
+                "consensus_votes": dict(vote_counts),
+                "consensus_runs": total_runs,
+                "agreement_ratio": 0.0,
+                "consensus_threshold": self.consensus.agreement_threshold,
+            }
+
+            if not vote_counts:
+                self.log(
+                    "Withdrawing example {id} (sample {sample}) due to missing parseable "
+                    "responses.".format(
+                        id=example.get("id"), sample=indices[position]
+                    )
+                )
+                outcomes.append(
+                    PredictionOutcome(
+                        raw_label=None,
+                        predicted_label=None,
+                        withdrawn=True,
+                        details=details,
+                    )
+                )
+                continue
+
+            best_label, best_count = max(vote_counts.items(), key=lambda item: item[1])
+            agreement_ratio = best_count / total_runs
+            details["agreement_ratio"] = agreement_ratio
+
+            if agreement_ratio < self.consensus.agreement_threshold:
+                self.log(
+                    "Withdrawing example {id} (sample {sample}) due to agreement ratio "
+                    "{ratio:.2f} below threshold {threshold:.2f}.".format(
+                        id=example.get("id"),
+                        sample=indices[position],
+                        ratio=agreement_ratio,
+                        threshold=self.consensus.agreement_threshold,
+                    )
+                )
+                outcomes.append(
+                    PredictionOutcome(
+                        raw_label=best_label,
+                        predicted_label=None,
+                        withdrawn=True,
+                        details=details,
+                    )
+                )
+                continue
+
+            outcomes.append(
+                PredictionOutcome(
+                    raw_label=best_label,
+                    predicted_label=best_label,
+                    withdrawn=False,
+                    details=details,
+                )
+            )
+
+        return outcomes
 
 
 class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
