@@ -165,15 +165,17 @@ class CSVGradingExperiment(Experiment[Mapping[str, Any]]):
 
         grouped = self._group_rows(rows_to_grade)
         total_rows = sum(len(group) for group in grouped.values())
+        progress_iter = self.progress(
+            range(total_rows),
+            total=total_rows,
+            description="CSV grading",
+            unit="row",
+        )
         graded_rows: List[int] = []
         parse_errors = 0
         consensus_withdrawn = 0
 
-        for (question, reference, instruction), rows in self.progress(
-            grouped.items(),
-            total=len(grouped),
-            description="CSV grading",
-        ):
+        for (question, reference, instruction), rows in grouped.items():
             batches = [
                 rows[i : i + self.config.batch_size]
                 for i in range(0, len(rows), self.config.batch_size)
@@ -213,6 +215,10 @@ class CSVGradingExperiment(Experiment[Mapping[str, Any]]):
                         )
                     if graded:
                         graded_rows.append(item_row.frame_index)
+                    next(progress_iter, None)
+
+        for _ in progress_iter:
+            pass
 
         metrics = {
             "graded_examples": len(graded_rows),
