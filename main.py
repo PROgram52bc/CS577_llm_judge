@@ -37,7 +37,12 @@ RCAC_AVAILABLE_MODELS = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run LLM judge experiments")
-    parser.add_argument("--sample-size", type=int, default=10, help="Number of examples to grade")
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        help="Optional limit on the number of CSV examples to grade. Defaults to all rows.",
+    )
     parser.add_argument(
         "--batch-size",
         type=int,
