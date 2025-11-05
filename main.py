@@ -5,6 +5,7 @@ import argparse
 import re
 from pathlib import Path
 
+from llm_judge.experiments import CSVGradingConfig, CSVGradingExperiment
 from llm_judge.experiments.scientsbank_kappa import (
     LABEL_SCHEMES,
     ConsensusGradingConfig,
@@ -36,12 +37,34 @@ RCAC_AVAILABLE_MODELS = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run LLM judge experiments")
-    parser.add_argument("--sample-size", type=int, default=10, help="Number of examples to grade")
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        help="Optional limit on the number of CSV examples to grade. Defaults to all rows.",
+    )
     parser.add_argument(
         "--batch-size",
         type=int,
         default=1,
         help="Number of dataset examples to include in a single LLM request.",
+    )
+    parser.add_argument(
+        "--csv-input",
+        type=Path,
+        default=None,
+        help="Path to a CSV file containing grading data. If provided, runs the CSV grading experiment.",
+    )
+    parser.add_argument(
+        "--csv-output-dir",
+        type=Path,
+        default=None,
+        help="Directory to write graded CSV results. Defaults to the log directory.",
+    )
+    parser.add_argument(
+        "--csv-skip-explanations",
+        action="store_true",
+        help="Do not request explanations when grading CSV rows.",
     )
     parser.add_argument(
         "--log-dir",
@@ -148,6 +171,37 @@ def main() -> None:
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
     run_identifier = build_run_identifier(args)
+
+    if args.csv_input is not None:
+        output_dir = args.csv_output_dir or args.log_dir
+        csv_config = CSVGradingConfig(
+            input_csv=args.csv_input,
+            output_dir=output_dir,
+            sample_size=args.sample_size,
+            batch_size=args.batch_size,
+            include_explanations=not args.csv_skip_explanations,
+        )
+        consensus_config = None
+        if args.experiment == "consensus":
+            consensus_config = ConsensusGradingConfig(
+                runs=args.consensus_runs,
+                agreement_threshold=args.consensus_threshold,
+            )
+        experiment = CSVGradingExperiment(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            config=csv_config,
+            run_name=run_identifier,
+            consensus=consensus_config,
+        )
+        metrics = experiment.run()
+        experiment.finalize_logs(metrics)
+        print("Results for CSV grading:")
+        for name, value in metrics.items():
+            print(f"  {name}: {value}")
+        print()
+        return
+
     schemes = resolve_label_schemes(args.label_schemes)
     config = SciEntsBankExperimentConfig(
         sample_size=args.sample_size,

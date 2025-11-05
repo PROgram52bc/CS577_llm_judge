@@ -50,7 +50,8 @@ class Experiment(ABC, Generic[T]):
         *,
         total: int | None = None,
         description: str | None = None,
+        unit: str = "sample",
     ) -> Iterator[T]:
         """Wrap an iterable in a tqdm progress bar."""
 
-        return iter(tqdm(iterable, total=total, desc=description, unit="sample"))
+        return iter(tqdm(iterable, total=total, desc=description, unit=unit))
