@@ -11,6 +11,18 @@ Two SciEntsBank-based experiments share the same dataset loading and logging inf
 
 Both experiments emit the same structured logging outputs (JSON, CSV, and/or text) with per-sample metadata and summary metrics at the end of the run.
 
+## Data Augmentation Flags
+
+Flags for augmenting the student answer in the SciEntsBankExperiments
+
+- **--ocr-augment** - randomly replaces characters with optically similar characters such as O with 0
+- **--typos** - randomly inserts typos where letters may be replaced with letters in the same area of the keyboard
+- **--non-influential-words** - randomly adds words that won't influence the meaning of the sentence
+- **--hyphens** - randomly adds hyphens before characters
+- **--non-unicode** - randomly inserts non-unicode characters
+- **--substitute-synonyms** - randomly substitutes words with synonyms
+- **--paraphrase** - paraphrases text by translating it to German and back to English
+
 ## LLM clients and models
 
 - **Mock** – deterministic label generator for testing the harness end-to-end.

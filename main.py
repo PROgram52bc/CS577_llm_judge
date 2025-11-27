@@ -17,6 +17,7 @@ from llm_judge.experiments.scientsbank_kappa import (
     SciEntsBankKappa3WayExperiment,
     SciEntsBankKappaExperiment,
 )
+from llm_judge.experiments.PromptAugmenter import PromptAugmentationConfig
 from llm_judge.logging.factory import ExperimentLoggerFactory
 from llm_judge.llms.base import LLMClient
 from llm_judge.llms import (
@@ -163,6 +164,48 @@ def parse_args() -> argparse.Namespace:
             "Minimum agreement ratio (0-1) required to keep a prediction in the consensus experiment."
         ),
     )
+    parser.add_argument(
+        '--ocr-augment',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers with ocr errors'
+    )
+    parser.add_argument(
+        '--typos',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers with typos'
+    )
+    parser.add_argument(
+        '--non-influential-words',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers with non influential words'
+    )
+    parser.add_argument(
+        '--hyphens',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers with hyphens'
+    )
+    parser.add_argument(
+        '--non-unicode',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers with non-unicode characters'
+    )
+    parser.add_argument(
+        '--substitute-synonyms',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers by substituting words with synonyms'
+    )
+    parser.add_argument(
+        '--paraphrase',
+        action='store_true',
+        default=False,
+        help='Augment SciEntsBank experiment data answers by paraphrasing'
+    )
     return parser.parse_args()
 
 
@@ -208,6 +251,15 @@ def main() -> None:
         processed_cache_dir=args.processed_cache_dir,
         batch_size=args.batch_size,
     )
+    promptAug = PromptAugmentationConfig(
+        ocr_augment = args.ocr_augment,
+        typos = args.typos,
+        non_influential = args.non_influential_words,
+        add_hyphens = args.hyphens,
+        non_unicode = args.non_unicode,
+        synonyms = args.substitute_synonyms,
+        paraphrase = args.paraphrase
+    )
 
     experiment_classes = {
         "5way": SciEntsBankKappaExperiment,
@@ -235,6 +287,7 @@ def main() -> None:
             run_name=run_identifier,
             config=config,
             **extra_kwargs,
+            promptAugment=promptAug
         )
         metrics = experiment.run()
         experiment.finalize_logs(metrics)

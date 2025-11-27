@@ -12,6 +12,7 @@ from datasets import ClassLabel, Dataset
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import accuracy_score, cohen_kappa_score
 
+from .PromptAugmenter import PromptAugmentationConfig, PromptAugmenter
 from ..data.loaders import DatasetConfig, DatasetLoader
 from ..llms.base import LLMClient, PromptExample
 from ..logging.factory import ExperimentLoggerFactory
@@ -133,6 +134,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         label_scheme: str = "5way",
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         scheme = LABEL_SCHEMES.get(label_scheme)
         if scheme is None:
@@ -146,6 +148,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         self.llm_client = llm_client
         self.scheme = scheme
         self._label_names: Sequence[str] | None = None
+        self.promptAugmenter = PromptAugmenter(promptAugment)
 
     def run(self) -> Dict[str, float]:
         dataset = self._load_dataset()
@@ -178,10 +181,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             )
 
             for index, example in enumerate(progress_iter, start=1):
+                student_answer = self.promptAugmenter.run(example["student_answer"])
                 prompt = PromptExample(
                     instruction=example["question"],
                     reference_answer=example["reference_answer"],
-                    student_answer=example["student_answer"],
+                    student_answer=student_answer,
                     score_instruction=score_instruction,
                 ).to_prompt()
                 outcome = self._grade_example(prompt, example)
@@ -507,12 +511,13 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
 
         example_lines: List[str] = []
         for idx, example in enumerate(examples, start=1):
+            student_answer = self.promptAugmenter.run(example.get('student_answer'))
             example_lines.extend(
                 [
                     f"Item {idx}",
                     f"Question: {example.get('question')}",
                     f"Reference Answer: {example.get('reference_answer')}",
-                    f"Student Answer: {example.get('student_answer')}",
+                    f"Student Answer: {student_answer}",
                     "",
                 ]
             )

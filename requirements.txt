@@ -6,3 +6,6 @@ openai
 requests
 scipy
 tqdm
+nlpaug
+torch
+sentencepiece
