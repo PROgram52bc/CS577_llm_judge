@@ -286,8 +286,8 @@ def main() -> None:
             logger_factory=logger_factory,
             run_name=run_identifier,
             config=config,
+            promptAugment=promptAug,
             **extra_kwargs,
-            promptAugment=promptAug
         )
         metrics = experiment.run()
         experiment.finalize_logs(metrics)

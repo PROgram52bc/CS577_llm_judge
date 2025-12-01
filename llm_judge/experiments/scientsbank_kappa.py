@@ -619,6 +619,7 @@ class SciEntsBankKappa3WayExperiment(SciEntsBankKappaExperiment):
         *,
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         super().__init__(
             llm_client=llm_client,
@@ -626,6 +627,7 @@ class SciEntsBankKappa3WayExperiment(SciEntsBankKappaExperiment):
             label_scheme="3way",
             run_name=run_name,
             config=config,
+            promptAugment=promptAugment,
         )
 
 
@@ -639,6 +641,7 @@ class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
         *,
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         super().__init__(
             llm_client=llm_client,
@@ -646,6 +649,7 @@ class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
             label_scheme="2way",
             run_name=run_name,
             config=config,
+            promptAugment=promptAugment,
         )
 
 
@@ -661,6 +665,7 @@ class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
         consensus: ConsensusGradingConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         super().__init__(
             llm_client=llm_client,
@@ -668,6 +673,7 @@ class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
             label_scheme=label_scheme,
             run_name=run_name,
             config=config,
+            promptAugment=promptAugment,
         )
         self.consensus = consensus or ConsensusGradingConfig()
 
@@ -846,6 +852,7 @@ class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
         consensus: ConsensusGradingConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         super().__init__(
             llm_client=llm_client,
@@ -854,6 +861,7 @@ class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
             run_name=run_name,
             config=config,
             consensus=consensus,
+            promptAugment=promptAugment,
         )
 
 
@@ -868,6 +876,7 @@ class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
         run_name: Optional[str] = None,
         config: SciEntsBankExperimentConfig | None = None,
         consensus: ConsensusGradingConfig | None = None,
+        promptAugment: PromptAugmentationConfig
     ) -> None:
         super().__init__(
             llm_client=llm_client,
@@ -876,4 +885,5 @@ class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
             run_name=run_name,
             config=config,
             consensus=consensus,
+            promptAugment=promptAugment,
         )
