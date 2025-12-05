@@ -5,7 +5,7 @@ from .base import LLMClient
 
 
 class ConstantLabelLLM(LLMClient):
-    """A mock model that returns labels using a simple heuristic."""
+    """A mock model that returns a constant label."""
     def __init__(self, const: int) -> None:
         self.label = const
 
