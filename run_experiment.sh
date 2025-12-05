@@ -121,5 +121,9 @@ run_cmd python main.py $BASE_ARGS \
     --experiment single \
     --paraphrase
 
+print_header "Baseline - Constant Answer" "Running with client giving a constant answer"
+python main.py $BASE_ARGS \
+    --experiment single
+    --force-answer 1
 echo ""
 echo "All experiments completed. Check $LOG_DIR for results."
