@@ -3,6 +3,7 @@
 from .api import OpenAIClient, RCACGenAIClient
 from .local import LocalPipelineClient, OllamaClient
 from .mock import MockLabelLLM
+from .mockConstant import ConstantLabelLLM
 
 __all__ = [
     "OpenAIClient",
@@ -10,4 +11,5 @@ __all__ = [
     "LocalPipelineClient",
     "OllamaClient",
     "MockLabelLLM",
+    "ConstantLabelLLM"
 ]
