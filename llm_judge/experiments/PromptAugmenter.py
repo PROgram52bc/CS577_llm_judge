@@ -25,33 +25,33 @@ class PromptAugmenter:
 
     def run(self, text):
         if self.params.paraphrase:
-            text = self.paraphrase(text)
+            text = self.paraphrase_text(text)
         if self.params.synonyms:
-            text = self.substituteSynonyms(text)
+            text = self.substitute_synonyms(text)
         if self.params.non_influential:
-            text = self.addNonInfluential(text)
+            text = self.add_non_influential(text)
         if self.params.typos:
-            text = self.addTypos(text)
+            text = self.add_typos(text)
         if self.params.ocr_augment:
-            text = self.ocrAugment(text)
+            text = self.ocr_augment(text)
         if self.params.non_unicode:
-            text = self.addNonUnicode(text)
+            text = self.add_non_unicode(text)
         if self.params.add_hyphens:
-            text = self.addHyphens(text)
+            text = self.add_hyphens(text)
         return text
 
-    def ocrAugment(self, text):
+    def ocr_augment(self, text):
         """Simulate text with OCR Errors"""
         aug = nac.OcrAug()
         augmented_texts = aug.augment(text)
         return augmented_texts[0]
 
-    def addTypos(self, text):
+    def add_typos(self, text):
         aug_keyboard = nac.KeyboardAug(aug_word_p=0.3, aug_char_p=.2)
         augmented_text = aug_keyboard.augment(text)
         return augmented_text[0]
 
-    def addNonInfluential(self, text):
+    def add_non_influential(self, text):
         """Insert non-influential words into the text"""
         aug = naw.ContextualWordEmbsAug(
             model_path='bert-base-uncased',
@@ -64,13 +64,13 @@ class PromptAugmenter:
         augmented_text = aug.augment(text)
         return augmented_text[0]
 
-    def addHyphens(self, text):
+    def add_hyphens(self, text):
         """Return text with hyphens randomly inserted before each letter"""
         aug = nac.RandomCharAug(action="insert", candidates=["-"], aug_char_p=0.08)
         augmented_text = aug.augment(text)
         return augmented_text[0]
 
-    def addNonUnicode(self, text):
+    def add_non_unicode(self, text):
         """Return text with non-unicode characters inserted into it"""
         aug = nac.RandomCharAug(action="insert",
                                 aug_char_p= .1,
@@ -78,14 +78,14 @@ class PromptAugmenter:
         augmented_text = aug.augment(text)
         return augmented_text[0]
 
-    def substituteSynonyms(self, text):
+    def substitute_synonyms(self, text):
         """ Return text that has some words replaced with synonyms """
         aug = naw.ContextualWordEmbsAug(
             model_path='bert-base-uncased', action="substitute")
         augmented_text = aug.augment(text)
         return augmented_text[0]
 
-    def paraphrase(self, text):
+    def paraphrase_text(self, text):
         """Returned paraphrased text by leveraging translation"""
         aug = naw.BackTranslationAug(
             from_model_name='Helsinki-NLP/opus-mt-en-de', # Found this model works better than default
