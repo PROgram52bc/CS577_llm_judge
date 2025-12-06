@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 @dataclass
 class PromptAugmentationConfig:
+    force_answer: str = None
     ocr_augment: bool = False
     typos: bool = False
     non_influential: bool = False
@@ -24,6 +25,8 @@ class PromptAugmenter:
         ]
 
     def run(self, text):
+        if self.params.force_answer is not None:
+            return self.params.force_answer
         if self.params.paraphrase:
             text = self.paraphrase(text)
         if self.params.synonyms:
