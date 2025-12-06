@@ -151,6 +151,8 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         self.scheme = scheme
         self._label_names: Sequence[str] | None = None
         self.promptAugmenter = PromptAugmenter(promptAugment)
+        self.labelRange = 5
+        self.forcedAnswerLabel = 3 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
     def run(self) -> Dict[str, float]:
         dataset = self._load_dataset()
@@ -249,7 +251,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         if not predicted_labels:
             metrics = self._empty_metrics()
         else:
-            metrics = self._compute_metrics(actual_labels, predicted_labels)
+            metrics = self._compute_metrics(actual_labels, predicted_labels, self.labelRange)
         total_examples = len(dataset)
         eligible_examples = total_examples - skipped
         withdraw_rate = (
@@ -434,6 +436,9 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             withdrawn += 1
 
         gold_label = int(example["label"])
+        if self.promptAugmenter.params.force_answer is not None:
+            # Add expected label for forced answer
+            gold_label = self.forcedAnswerLabel
         if outcome.predicted_label is not None and not outcome.withdrawn:
             actual_labels.append(gold_label)
             predicted_labels.append(outcome.predicted_label)
@@ -627,10 +632,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         return predictions
 
     @staticmethod
-    def _compute_metrics(actual: Iterable[int], predicted: Iterable[int]) -> Dict[str, float]:
+    def _compute_metrics(actual: Iterable[int], predicted: Iterable[int], labelRange) -> Dict[str, float]:
         actual_list = list(actual)
         predicted_list = list(predicted)
-        kappa = cohen_kappa_score(actual_list, predicted_list)
+        #for --forced-answer flag our actual labels and are constant so this messes with the metrics
+        kappa = cohen_kappa_score(actual_list, predicted_list, labels=list(range(labelRange)))
         accuracy = accuracy_score(actual_list, predicted_list)
 
         pearson_corr = float("nan")
@@ -682,6 +688,8 @@ class SciEntsBankKappa3WayExperiment(SciEntsBankKappaExperiment):
             config=config,
             promptAugment=promptAugment,
         )
+        self.labelRange = 3
+        self.forcedAnswerLabel = 2 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
@@ -704,6 +712,8 @@ class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
             config=config,
             promptAugment=promptAugment,
         )
+        self.labelRange = 2
+        self.forcedAnswerLabel = 1 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
@@ -916,6 +926,8 @@ class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
             consensus=consensus,
             promptAugment=promptAugment,
         )
+        self.labelRange = 3
+        self.forcedAnswerLabel = 2 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
@@ -940,3 +952,5 @@ class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
             consensus=consensus,
             promptAugment=promptAugment,
         )
+        self.labelRange = 2
+        self.forcedAnswerLabel = 1 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
