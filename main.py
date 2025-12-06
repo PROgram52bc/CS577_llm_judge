@@ -216,7 +216,7 @@ def parse_args() -> argparse.Namespace:
         '--force-answer',
         type=str,
         default=None,
-        help="Force a answer (0-4 for 5way, 0-2 for 3way, 0-1 for 2way).",
+        help="Force the student answer to always be a specified string",
     )
     args = parser.parse_args()
     return args
