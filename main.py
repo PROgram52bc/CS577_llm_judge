@@ -26,7 +26,6 @@ from llm_judge.llms import (
     OllamaClient,
     OpenAIClient,
     RCACGenAIClient,
-    ConstantLabelLLM
 )
 
 RCAC_AVAILABLE_MODELS = (
@@ -215,37 +214,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--force-answer',
-        type=int,
+        type=str,
         default=None,
         help="Force a answer (0-4 for 5way, 0-2 for 3way, 0-1 for 2way).",
     )
     args = parser.parse_args()
-    if args.force_answer is not None:
-        # Determine the maximum valid answer based on the primary label scheme.
-        # Use the first scheme if multiple are specified, or 5way as a safe default if label_schemes is empty.
-        # resolve_label_schemes will normalize and resolve 'all'. We can simulate that logic here for the primary scheme.
-
-        schemes = resolve_label_schemes(args.label_schemes)
-
-        if not schemes:
-            max_label = 4
-        elif "5way" in schemes:
-            max_label = 4
-            scheme_name = "5way"
-        elif "3way" in schemes:
-            max_label = 2
-            scheme_name = "3way"
-        elif "2way" in schemes:
-            max_label = 1
-            scheme_name = "2way"
-        else:
-            max_label = 4
-            scheme_name = "5way (fallback)"
-        if not (0 <= args.force_answer <= max_label):
-            parser.error(
-                f"argument --force-answer: invalid choice: {args.force_answer} "
-                f"(must be between 0 and {max_label} for label scheme(s) including '{scheme_name}')."
-            )
     return args
 
 
@@ -293,6 +266,7 @@ def main() -> None:
         summary_log_file=args.summary_log_file,
     )
     promptAug = PromptAugmentationConfig(
+        force_answer = args.force_answer,
         ocr_augment = args.ocr_augment,
         typos = args.typos,
         non_influential = args.non_influential_words,
@@ -342,8 +316,6 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
     """Instantiate the LLM client specified on the command line."""
 
     backend = args.llm_backend
-    if args.force_answer is not None:
-        return ConstantLabelLLM(args.force_answer)
     if backend == "mock":
         return MockLabelLLM()
     if backend == "openai":
