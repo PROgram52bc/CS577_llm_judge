@@ -46,6 +46,8 @@ class LabelSchemeConfig:
 
     key: str
     display_name: str
+    label_range: int
+    forced_answer_label: int
     label_mapping: Mapping[str, int] | None
     label_names: Sequence[str] | None
     prediction_normalization: Mapping[int, int] | None
@@ -56,6 +58,8 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
     "5way": LabelSchemeConfig(
         key="5way",
         display_name="5-way",
+        label_range=5,
+        forced_answer_label=3,
         label_mapping=None,
         label_names=None,
         prediction_normalization=None,
@@ -64,6 +68,8 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
     "3way": LabelSchemeConfig(
         key="3way",
         display_name="3-way",
+        label_range=3,
+        forced_answer_label=2,
         label_mapping={
             "correct": 0,
             "contradictory": 1,
@@ -78,6 +84,8 @@ LABEL_SCHEMES: Dict[str, LabelSchemeConfig] = {
     "2way": LabelSchemeConfig(
         key="2way",
         display_name="2-way",
+        label_range=2,
+        forced_answer_label=1,
         label_mapping={
             "correct": 0,
             "contradictory": 1,
@@ -151,8 +159,8 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         self.scheme = scheme
         self._label_names: Sequence[str] | None = None
         self.promptAugmenter = PromptAugmenter(promptAugment)
-        self.labelRange = 5
-        self.forcedAnswerLabel = 3 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
+        self.labelRange = self.scheme.label_range
+        self.forcedAnswerLabel = self.scheme.forced_answer_label
 
     def run(self) -> Dict[str, float]:
         dataset = self._load_dataset()
@@ -688,8 +696,6 @@ class SciEntsBankKappa3WayExperiment(SciEntsBankKappaExperiment):
             config=config,
             promptAugment=promptAugment,
         )
-        self.labelRange = 3
-        self.forcedAnswerLabel = 2 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
@@ -712,8 +718,6 @@ class SciEntsBankKappa2WayExperiment(SciEntsBankKappaExperiment):
             config=config,
             promptAugment=promptAugment,
         )
-        self.labelRange = 2
-        self.forcedAnswerLabel = 1 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
@@ -926,8 +930,6 @@ class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
             consensus=consensus,
             promptAugment=promptAugment,
         )
-        self.labelRange = 3
-        self.forcedAnswerLabel = 2 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
 
 
 class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
@@ -952,5 +954,3 @@ class SciEntsBankConsensus2WayExperiment(SciEntsBankConsensusExperiment):
             consensus=consensus,
             promptAugment=promptAugment,
         )
-        self.labelRange = 2
-        self.forcedAnswerLabel = 1 # Assuming the --forced-answer tag's expected answer is incorrect/irrelevant
