@@ -444,9 +444,12 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             withdrawn += 1
 
         gold_label = int(example["label"])
+        student_answer = example.get("student_answer")
         if self.promptAugmenter.params.force_answer is not None:
             # Add expected label for forced answer
             gold_label = self.forcedAnswerLabel
+            student_answer = self.promptAugmenter.params.force_answer
+
         if outcome.predicted_label is not None and not outcome.withdrawn:
             actual_labels.append(gold_label)
             predicted_labels.append(outcome.predicted_label)
@@ -458,7 +461,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "id": example.get("id"),
             "question": example.get("question"),
             "reference_answer": example.get("reference_answer"),
-            "student_answer": example.get("student_answer"),
+            "student_answer": student_answer,
             "gold_label_id": gold_label,
             "gold_label_name": label_lookup(gold_label),
             "withdrawn": outcome.withdrawn,
