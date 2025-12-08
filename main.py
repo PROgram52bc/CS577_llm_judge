@@ -74,6 +74,12 @@ def parse_args() -> argparse.Namespace:
         help="Directory to write experiment logs",
     )
     parser.add_argument(
+        "--summary-log-file",
+        type=Path,
+        default=Path("logs/summary_stats.csv"),
+        help="Path to write a CSV summary of experiment results. Defaults to 'logs/summary_stats.csv'.",
+    )
+    parser.add_argument(
         "--log-format",
         dest="log_formats",
         choices=["json", "csv", "text"],
@@ -250,6 +256,7 @@ def main() -> None:
         sample_size=args.sample_size,
         processed_cache_dir=args.processed_cache_dir,
         batch_size=args.batch_size,
+        summary_log_file=args.summary_log_file,
     )
     promptAug = PromptAugmentationConfig(
         ocr_augment = args.ocr_augment,

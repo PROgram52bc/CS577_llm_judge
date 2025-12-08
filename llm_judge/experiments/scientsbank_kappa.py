@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import csv
 from collections import Counter
 from collections.abc import Mapping as ABCMapping
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ class SciEntsBankExperimentConfig:
     dataset_name: str = "nkazi/SciEntsBank"
     processed_cache_dir: Optional[Path] = None
     batch_size: int = 1
+    summary_log_file: Optional[Path] = None
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:
@@ -266,7 +268,58 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
 
         for name, value in metrics.items():
             self.log(f"{name}: {value}")
+
+        self._log_summary(metrics)
+
         return metrics
+
+    def _log_summary(self, metrics: Dict[str, float]) -> None:
+        if not self.config.summary_log_file:
+            return
+
+        summary_file = self.config.summary_log_file
+        summary_file.parent.mkdir(parents=True, exist_ok=True)
+
+        is_consensus = isinstance(self, SciEntsBankConsensusExperiment)
+
+        model_name = "unknown"
+        if hasattr(self.llm_client, "model") and isinstance(
+            getattr(self.llm_client, "model", None), str
+        ):
+            model_name = getattr(self.llm_client, "model")
+        elif hasattr(self.llm_client, "name") and isinstance(
+            getattr(self.llm_client, "name", None), str
+        ):
+            model_name = getattr(self.llm_client, "name")
+        else:
+            model_name = self.llm_client.__class__.__name__.replace("Client", "")
+
+        row_data = {
+            "dataset_name": self.config.dataset_name,
+            "grading_mode": "consensus" if is_consensus else "single",
+            "label_scheme": self.scheme.key,
+            "batch_size": self.config.batch_size,
+            "model": model_name,
+            "cohen_kappa": metrics.get("cohen_kappa"),
+            "accuracy": metrics.get("accuracy"),
+            "pearson_correlation": metrics.get("pearson_correlation"),
+            "spearman_correlation": metrics.get("spearman_correlation"),
+            "total_examples": metrics.get("total_examples"),
+            "eligible_examples": metrics.get("eligible_examples"),
+            "graded_examples": metrics.get("graded_examples"),
+            "withdrawn_examples": metrics.get("withdrawn_examples"),
+            "withdraw_rate": metrics.get("withdraw_rate"),
+            "skipped_examples": metrics.get("skipped_examples"),
+        }
+
+        file_exists = summary_file.exists() and summary_file.stat().st_size > 0
+        with open(summary_file, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=row_data.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(row_data)
+
+        self.log(f"Wrote summary to {summary_file}")
 
     def _grade_example(
         self, prompt: str, example: ABCMapping[str, object]
