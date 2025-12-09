@@ -342,11 +342,11 @@ def build_llm_client(args: argparse.Namespace) -> LLMClient:
 def build_run_identifier(args: argparse.Namespace) -> str:
     parts = [args.experiment, args.llm_backend]
     if args.model_name:
-        sanitized = re.sub(r"[^0-9A-Za-z._-]+", "-", args.model_name)
+        sanitized = re.sub(r"[^0-9A-Za-z_-]+", "-", args.model_name)
         sanitized = sanitized.strip("-_") or "model"
         parts.append(sanitized)
     elif args.llm_backend == "rcac" and args.rcac_model:
-        sanitized = re.sub(r"[^0-9A-Za-z._-]+", "-", args.rcac_model)
+        sanitized = re.sub(r"[^0-9A-Za-z_-]+", "-", args.rcac_model)
         sanitized = sanitized.strip("-_") or "model"
         parts.append(sanitized)
     return "_".join(parts)
