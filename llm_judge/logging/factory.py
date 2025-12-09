@@ -174,3 +174,41 @@ class ExperimentLoggerFactory:
         else:
             file_name = f"{experiment_name}_{timestamp}"
         return self.base_dir / file_name
+
+
+class CsvSummaryLogger:
+    """A generic logger to append data rows to a CSV file."""
+
+    def __init__(self, file_path: Path, fieldnames: Sequence[str]):
+        self.file_path = file_path
+        self.fieldnames = list(fieldnames)
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_header_if_needed()
+
+    def _write_header_if_needed(self) -> None:
+        """Writes the header to the CSV file if it's new or empty."""
+        try:
+            file_exists = self.file_path.stat().st_size > 0
+        except FileNotFoundError:
+            file_exists = False
+
+        if not file_exists:
+            with self.file_path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=self.fieldnames)
+                writer.writeheader()
+
+    def log(self, row_data: Mapping[str, object]) -> None:
+        """Appends a single row of data to the summary CSV file."""
+        with self.file_path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=self.fieldnames)
+            sanitized_row = {
+                key: self._sanitize_value(row_data.get(key)) for key in self.fieldnames
+            }
+            writer.writerow(sanitized_row)
+
+    @staticmethod
+    def _sanitize_value(value: object) -> str:
+        if value is None:
+            return ""
+        text = str(value)
+        return text.replace("\r", " ").replace("\n", " ")
