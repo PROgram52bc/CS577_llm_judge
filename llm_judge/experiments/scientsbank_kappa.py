@@ -16,7 +16,7 @@ from sklearn.metrics import accuracy_score, cohen_kappa_score
 from .PromptAugmenter import PromptAugmentationConfig, PromptAugmenter
 from ..data.loaders import DatasetConfig, DatasetLoader
 from ..llms.base import LLMClient, PromptExample
-from ..logging.factory import ExperimentLoggerFactory
+from ..logging.factory import CsvSummaryLogger, ExperimentLoggerFactory
 from .base import Experiment
 
 
@@ -287,9 +287,6 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         if not self.config.summary_log_file:
             return
 
-        summary_file = self.config.summary_log_file
-        summary_file.parent.mkdir(parents=True, exist_ok=True)
-
         is_consensus = isinstance(self, SciEntsBankConsensusExperiment)
 
         model_name = "unknown"
@@ -322,14 +319,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "skipped_examples": metrics.get("skipped_examples"),
         }
 
-        file_exists = summary_file.exists() and summary_file.stat().st_size > 0
-        with open(summary_file, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=row_data.keys())
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(row_data)
+        fieldnames = list(row_data.keys())
+        summary_logger = CsvSummaryLogger(self.config.summary_log_file, fieldnames)
+        summary_logger.log(row_data)
 
-        self.log(f"Wrote summary to {summary_file}")
+        self.log(f"Wrote summary to {self.config.summary_log_file}")
 
     def _grade_example(
         self, prompt: str, example: ABCMapping[str, object]
