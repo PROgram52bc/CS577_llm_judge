@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
 from llm_judge.experiments import CSVGradingConfig, CSVGradingExperiment
@@ -224,6 +225,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    cmd_args_str = " ".join(sys.argv)
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
     run_identifier = build_run_identifier(args)
@@ -264,6 +266,7 @@ def main() -> None:
         processed_cache_dir=args.processed_cache_dir,
         batch_size=args.batch_size,
         summary_log_file=args.summary_log_file,
+        command_line_args=cmd_args_str,
     )
     promptAug = PromptAugmentationConfig(
         force_answer = args.force_answer,
