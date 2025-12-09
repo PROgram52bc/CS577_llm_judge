@@ -34,6 +34,7 @@ class SciEntsBankExperimentConfig:
     processed_cache_dir: Optional[Path] = None
     batch_size: int = 1
     summary_log_file: Optional[Path] = None
+    command_line_args: str = ""
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:
@@ -317,6 +318,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "withdrawn_examples": metrics.get("withdrawn_examples"),
             "withdraw_rate": metrics.get("withdraw_rate"),
             "skipped_examples": metrics.get("skipped_examples"),
+            "command_line_args": self.config.command_line_args,
         }
 
         fieldnames = list(row_data.keys())
