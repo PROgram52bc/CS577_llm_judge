@@ -6,7 +6,9 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot A: Robustness Drop (Sensitivity Analysis)
 **Data Generation:** `run_plot_A_robustness.sh`  
+
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
+
 **Goal:** Quantify the degradation of grading reliability when the model faces noisy or imperfect input data.
 
 * **Plot Type:** Vertical Bar Chart
@@ -22,7 +24,9 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot B: Null Model Vulnerability (Adversarial Attack)
 **Data Generation:** `run_plot_B_null_models.sh`  
+
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
+
 **Goal:** Validate the findings of [Zheng et al., 2025] by testing if the model assigns high scores to vacuous or adversarial answers.
 
 * **Plot Type:** Grouped Bar Chart (or Box Plot)
@@ -41,7 +45,9 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot C: The "Trust Curve" (Coverage vs. Accuracy)
 **Data Generation:** `run_plot_C_consensus.sh`  
+
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
+
 **Goal:** Demonstrate the utility of the consensus mechanism. We hypothesize that allowing the model to abstain (withdraw) from uncertain cases increases the reliability of the remaining grades.
 
 * **Plot Type:** Line Plot with Markers
@@ -58,7 +64,9 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot D: Confusion Matrix (Error Analysis)
 **Data Generation:** `run_plot_D_confusion.sh`
+
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
+
 **Goal:** Diagnose specific grading biases. Does the model punish valid answers (harshness) or reward incorrect ones (hallucination)?
 
 * **Plot Type:** Heatmap
