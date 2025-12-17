@@ -9,3 +9,6 @@ tqdm
 nlpaug
 torch
 sentencepiece
+matplotlib
+seaborn
+numpy

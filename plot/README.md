@@ -6,6 +6,8 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot A: Robustness Drop (Sensitivity Analysis)
 **Data Generation:** `run_plot_A_robustness.sh`  
+The input CSV for this plot must contain a `label` column with the following strings:
+`baseline`, `ocr`, `typo`, `non_influential`, `hyphen`, `non_unicode`, `synonym`, `paraphrase`.
 
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
 
@@ -24,6 +26,9 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot B: Null Model Vulnerability (Adversarial Attack)
 **Data Generation:** `run_plot_B_null_models.sh`  
+The input CSV for this plot must contain:
+1.  A `label` column with the following strings: `control_real_answer`, `naive_solution`, `naive_i_dont_know`, `persuasive_ignore`, `persuasive_this_response`, `structured_json_injection`.
+2.  A `avg_predicted_score` column containing the average score for each group.
 
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
 
@@ -45,6 +50,7 @@ This document outlines the visualization strategy for the four experimental scri
 
 ## Plot C: The "Trust Curve" (Coverage vs. Accuracy)
 **Data Generation:** `run_plot_C_consensus.sh`  
+The input CSV for this plot must contain a `label` column where each label is a string representing the consensus threshold used for that data point (e.g., `"0.5"`, `"0.6"`, `"0.7"`).
 
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
 

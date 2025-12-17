@@ -4,7 +4,7 @@
 # Configuration
 LLM_BACKEND="rcac"
 MODEL_NAME="qwen2.5:72b"
-SAMPLE_SIZE=500
+SAMPLE_SIZE=40
 BATCH_SIZE=8
 LOG_DIR="logs/plot_D_confusion"
 LABEL_SCHEME="5way"    # 5-way gives the most interesting confusion matrix

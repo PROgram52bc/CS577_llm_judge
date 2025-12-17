@@ -4,7 +4,7 @@
 # Configuration
 LLM_BACKEND="rcac"
 MODEL_NAME="qwen2.5:72b"
-SAMPLE_SIZE=500        # High sample size for significant results
+SAMPLE_SIZE=40        # High sample size for significant results
 BATCH_SIZE=8
 LOG_DIR="logs/plot_A_robustness"
 LABEL_SCHEME="2way"    # Using 2way usually shows clearer drops in robustness
