@@ -35,6 +35,7 @@ class SciEntsBankExperimentConfig:
     batch_size: int = 1
     summary_log_file: Optional[Path] = None
     command_line_args: str = ""
+    label: str = ""
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:
@@ -304,6 +305,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
 
         row_data = {
             "dataset_name": self.config.dataset_name,
+            "label": self.config.label,
             "grading_mode": "consensus" if is_consensus else "single",
             "label_scheme": self.scheme.key,
             "batch_size": self.config.batch_size,

@@ -50,7 +50,7 @@ The input CSV for this plot must contain:
 
 ## Plot C: The "Trust Curve" (Coverage vs. Accuracy)
 **Data Generation:** `run_plot_C_consensus.sh`  
-The input CSV for this plot must contain a `label` column where each label is a string representing the consensus threshold used for that data point (e.g., `"0.5"`, `"0.6"`, `"0.7"`).
+The input CSV for this plot must contain a `label` column where each label is a string representing the consensus threshold used for that data point (e.g., `"consensus_0.5"`, `"consensus_0.6"`, `"consensus_0.7"`).
 
 **Plot Generation:** [TODO: Run this command to produce the plot, should take input file as argument]
 

@@ -17,28 +17,28 @@ echo ">>> [Plot A] Starting Robustness Experiments..."
 
 # 1. Baseline (No noise)
 echo "Running Baseline..."
-python main.py $BASE_ARGS
+python main.py $BASE_ARGS --label "baseline"
 
 # 2. Augmentations
 echo "Running OCR Augmentation..."
-python main.py $BASE_ARGS --ocr-augment
+python main.py $BASE_ARGS --ocr-augment --label "ocr"
 
 echo "Running Typo Augmentation..."
-python main.py $BASE_ARGS --typos
+python main.py $BASE_ARGS --typos --label "typo"
 
 echo "Running Non-Influential Word Injection..."
-python main.py $BASE_ARGS --non-influential-words
+python main.py $BASE_ARGS --non-influential-words --label "non_influential"
 
 echo "Running Hyphen Injection..."
-python main.py $BASE_ARGS --hyphens
+python main.py $BASE_ARGS --hyphens --label "hyphen"
 
 echo "Running Non-Unicode Injection..."
-python main.py $BASE_ARGS --non-unicode
+python main.py $BASE_ARGS --non-unicode --label "non_unicode"
 
 echo "Running Synonym Substitution..."
-python main.py $BASE_ARGS --substitute-synonyms
+python main.py $BASE_ARGS --substitute-synonyms --label "synonym"
 
 echo "Running Paraphrasing..."
-python main.py $BASE_ARGS --paraphrase
+python main.py $BASE_ARGS --paraphrase --label "paraphrase"
 
 echo ">>> [Plot A] Complete. Data saved in $LOG_DIR"

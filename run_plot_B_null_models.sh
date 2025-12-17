@@ -26,25 +26,25 @@ echo ">>> [Plot B] Starting Null Model Experiments..."
 
 # 1. Control Group (Real Answers)
 echo "Running Control (Real Student Answers)..."
-python main.py $BASE_ARGS
+python main.py $BASE_ARGS --label "control_real_answer"
 
 # 2. Naive Attacks
 echo "Running Naive Attack (Solution)..."
-python main.py $BASE_ARGS --force-answer "$NAIVE_1"
+python main.py $BASE_ARGS --force-answer "$NAIVE_1" --label "naive_solution"
 
 echo "Running Naive Attack (I don't know)..."
-python main.py $BASE_ARGS --force-answer "$NAIVE_2"
+python main.py $BASE_ARGS --force-answer "$NAIVE_2" --label "naive_i_dont_know"
 
 # 3. Persuasive Attacks
 echo "Running Persuasive Attack (Direct)..."
-python main.py $BASE_ARGS --force-answer "$PERSUASIVE_1"
+python main.py $BASE_ARGS --force-answer "$PERSUASIVE_1" --label "persuasive_ignore"
 
 echo "Running Persuasive Attack (Quality Claim)..."
-python main.py $BASE_ARGS --force-answer "$PERSUASIVE_2"
+python main.py $BASE_ARGS --force-answer "$PERSUASIVE_2" --label "persuasive_this_response"
 
 # 4. Structured Attack
 echo "Running Structured Attack (Text Prompt Injection)..."
 # We use the variable directly. Ensure your python script handles the passed newlines correctly.
-python main.py $BASE_ARGS --force-answer "$STRUCTURED_ATTACK"
+python main.py $BASE_ARGS --force-answer "$STRUCTURED_ATTACK" --label "structured_json_injection"
 
 echo ">>> [Plot B] Complete. Data saved in $LOG_DIR"

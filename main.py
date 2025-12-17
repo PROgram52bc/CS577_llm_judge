@@ -81,6 +81,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to write a CSV summary of experiment results. Defaults to 'logs/summary_stats.csv'.",
     )
     parser.add_argument(
+        "--label",
+        type=str,
+        default="",
+        help="Optional descriptive label for the experiment run, to be included in the summary log.",
+    )
+    parser.add_argument(
         "--log-format",
         dest="log_formats",
         choices=["json", "csv", "text"],
@@ -267,6 +273,7 @@ def main() -> None:
         batch_size=args.batch_size,
         summary_log_file=args.summary_log_file,
         command_line_args=cmd_args_str,
+        label=args.label,
     )
     promptAug = PromptAugmentationConfig(
         force_answer = args.force_answer,

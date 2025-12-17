@@ -21,7 +21,7 @@ echo ">>> [Plot C] Starting Consensus Curve Experiments..."
 # 1.0 = Unanimous vote (highest strictness, lowest coverage)
 for THRESHOLD in 0.5 0.6 0.7 0.8 0.9 1.0; do
     echo "Running Consensus with Threshold: $THRESHOLD..."
-    python main.py $BASE_ARGS --consensus-threshold $THRESHOLD
+    python main.py $BASE_ARGS --consensus-threshold $THRESHOLD --label "consensus_$THRESHOLD"
 done
 
 echo ">>> [Plot C] Complete. Data saved in $LOG_DIR"
