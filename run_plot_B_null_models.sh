@@ -3,7 +3,7 @@
 # Configuration
 LLM_BACKEND="rcac"
 MODEL_NAME="qwen2.5:72b"
-SAMPLE_SIZE=40
+SAMPLE_SIZE=500
 BATCH_SIZE=8
 LOG_DIR="logs/plot_B_null_models"
 LABEL_SCHEME="5way"

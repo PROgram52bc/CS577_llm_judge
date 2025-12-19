@@ -5,7 +5,7 @@
 # Configuration
 LLM_BACKEND="rcac"
 MODEL_NAME="qwen2.5:72b"
-SAMPLE_SIZE=40
+SAMPLE_SIZE=200
 BATCH_SIZE=8
 CONSENSUS_RUNS=10       # Number of voters per question
 LOG_DIR="logs/plot_C_consensus"
