@@ -939,7 +939,8 @@ class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
 
     def run(self) -> Dict[str, float]:
         """
-        Overrides the default run to implement the "collect-then-analyze" strategy.
+        Overrides the default run to implement the "collect-then-analyze" strategy,
+        including support for batching.
         """
         dataset = self._load_dataset()
         if len(dataset) == 0:
@@ -953,16 +954,27 @@ class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
             f"{len(dataset)} examples, collecting {self.consensus.runs} votes per sample."
         )
 
-        # --- Step 1: Collect all votes for all samples ---
+        # --- Step 1: Collect all votes for all samples (with batching) ---
         all_sample_votes: List[List[int]] = []
-        progress_iter = self.progress(
-            dataset,
-            total=len(dataset),
-            description=f"{self.scheme.display_name} vote collection",
-        )
-        for example in progress_iter:
-            votes = self._collect_votes_for_sample(score_instruction, example)
-            all_sample_votes.append(votes)
+        batch_size = max(1, self.config.batch_size)
+
+        if batch_size == 1:
+            progress_iter = self.progress(dataset, total=len(dataset), description=f"{self.scheme.display_name} vote collection")
+            for example in progress_iter:
+                votes = self._collect_votes_for_sample(score_instruction, example)
+                all_sample_votes.append(votes)
+        else:
+            progress_iter = self.progress(dataset, total=len(dataset), description=f"{self.scheme.display_name} batched vote collection")
+            current_batch: List[ABCMapping[str, object]] = []
+            for index, example in enumerate(progress_iter, start=1):
+                current_batch.append(example)
+                is_last = len(current_batch) == batch_size or index == len(dataset)
+                if not is_last:
+                    continue
+                
+                batch_votes = self._collect_votes_for_batch(score_instruction, current_batch)
+                all_sample_votes.extend(batch_votes)
+                current_batch = []
 
         # --- Step 2: Analyze votes for each threshold ---
         thresholds = self.config.consensus_thresholds or [0.67]
@@ -1007,7 +1019,7 @@ class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
                 }
 
             total_examples = len(dataset)
-            eligible_examples = total_examples # No skipped examples in this flow
+            eligible_examples = total_examples
             withdraw_rate = withdrawn / eligible_examples if eligible_examples > 0 else float("nan")
             metrics.update({
                 "total_examples": total_examples,
@@ -1018,12 +1030,11 @@ class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
                 "skipped_examples": 0,
             })
             
-            # Temporarily set config label and threshold for logging
             original_label = self.config.label
             self.config.label = f"consensus_{threshold}"
             self.consensus.agreement_threshold = threshold
             self._log_summary(metrics, label_counts)
-            self.config.label = original_label # Restore original label
+            self.config.label = original_label
 
             overall_metrics[f"accuracy_at_{threshold}"] = metrics["accuracy"]
         
@@ -1051,6 +1062,28 @@ class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
                 continue
             votes.append(normalized)
         return votes
+
+    def _collect_votes_for_batch(self, score_instruction: str, batch: Sequence[ABCMapping[str, object]]) -> List[List[int]]:
+        """Helper to collect multiple votes for a batch of samples."""
+        prompt = self._build_batch_prompt(batch, score_instruction)
+        
+        # Initialize a list of lists to store votes for each sample in the batch
+        votes_for_each_sample: List[List[int]] = [[] for _ in batch]
+
+        for _ in range(self.consensus.runs):
+            response = self.llm_client.generate(prompt)
+            parsed_run = self._extract_batch_predictions(response, len(batch))
+
+            for i, parsed_item in enumerate(parsed_run):
+                raw_label = parsed_item.raw_label
+                if raw_label is None:
+                    continue
+                normalized = self._normalize_prediction(raw_label)
+                if normalized is None:
+                    continue
+                votes_for_each_sample[i].append(normalized)
+        
+        return votes_for_each_sample
 
 
 class SciEntsBankConsensusCurve3WayExperiment(SciEntsBankConsensusCurveExperiment):
