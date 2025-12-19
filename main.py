@@ -14,6 +14,9 @@ from llm_judge.experiments.scientsbank_kappa import (
     SciEntsBankConsensus2WayExperiment,
     SciEntsBankConsensus3WayExperiment,
     SciEntsBankConsensusExperiment,
+    SciEntsBankConsensusCurveExperiment,
+    SciEntsBankConsensusCurve3WayExperiment,
+    SciEntsBankConsensusCurve2WayExperiment,
     SciEntsBankExperimentConfig,
     SciEntsBankKappa2WayExperiment,
     SciEntsBankKappa3WayExperiment,
@@ -115,11 +118,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--experiment",
-        choices=["single", "consensus"],
+        choices=["single", "consensus", "consensus_curve"],
         default="single",
         help=(
-            "Experiment variant to run. 'single' issues one LLM call per sample while "
-            "'consensus' requires agreement across multiple runs."
+            "Experiment variant to run. 'single' issues one LLM call per sample, "
+            "'consensus' requires agreement across multiple runs for a single threshold, and "
+            "'consensus_curve' efficiently generates data for multiple thresholds."
         ),
     )
     parser.add_argument(
@@ -190,11 +194,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--consensus-threshold",
+        "--consensus-thresholds",
         type=float,
-        default=0.67,
+        nargs='+',
+        default=[0.67],
         help=(
-            "Minimum agreement ratio (0-1) required to keep a prediction in the consensus experiment."
+            "A list of agreement ratios (0-1) to test in the 'consensus_curve' experiment."
         ),
     )
     parser.add_argument(
@@ -295,6 +300,7 @@ def main() -> None:
         command_line_args=cmd_args_str,
         label=args.label,
         shuffle_seed=args.shuffle_seed,
+        consensus_thresholds=args.consensus_thresholds,
     )
     promptAug = PromptAugmentationConfig(
         force_answer = args.force_answer,
@@ -316,12 +322,23 @@ def main() -> None:
     if args.experiment == "consensus":
         consensus_config = ConsensusGradingConfig(
             runs=args.consensus_runs,
-            agreement_threshold=args.consensus_threshold,
+            agreement_threshold=args.consensus_thresholds[0], # Use first threshold for single run
         )
         experiment_classes = {
             "5way": SciEntsBankConsensusExperiment,
             "3way": SciEntsBankConsensus3WayExperiment,
             "2way": SciEntsBankConsensus2WayExperiment,
+        }
+        extra_kwargs["consensus"] = consensus_config
+    elif args.experiment == "consensus_curve":
+        consensus_config = ConsensusGradingConfig(
+            runs=args.consensus_runs,
+            agreement_threshold=0.0, # Use a valid dummy value; it's not used directly.
+        )
+        experiment_classes = {
+            "5way": SciEntsBankConsensusCurveExperiment,
+            "3way": SciEntsBankConsensusCurve3WayExperiment,
+            "2way": SciEntsBankConsensusCurve2WayExperiment,
         }
         extra_kwargs["consensus"] = consensus_config
 

@@ -37,6 +37,7 @@ class SciEntsBankExperimentConfig:
     command_line_args: str = ""
     label: str = ""
     shuffle_seed: Optional[int] = None
+    consensus_thresholds: Optional[List[float]] = None
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:
@@ -928,6 +929,176 @@ class SciEntsBankConsensusExperiment(SciEntsBankKappaExperiment):
             )
 
         return outcomes
+
+
+class SciEntsBankConsensusCurveExperiment(SciEntsBankConsensusExperiment):
+    """
+    An efficient version of the consensus experiment that tests multiple thresholds
+    in a single run by collecting votes once.
+    """
+
+    def run(self) -> Dict[str, float]:
+        """
+        Overrides the default run to implement the "collect-then-analyze" strategy.
+        """
+        dataset = self._load_dataset()
+        if len(dataset) == 0:
+            self.log("No examples available after loading dataset.")
+            return self._empty_metrics()
+
+        self._label_names = self._resolve_label_names(dataset)
+        score_instruction = self._build_score_instruction()
+        self.log(
+            f"Starting {self.name} using {self.scheme.display_name} labels on "
+            f"{len(dataset)} examples, collecting {self.consensus.runs} votes per sample."
+        )
+
+        # --- Step 1: Collect all votes for all samples ---
+        all_sample_votes: List[List[int]] = []
+        progress_iter = self.progress(
+            dataset,
+            total=len(dataset),
+            description=f"{self.scheme.display_name} vote collection",
+        )
+        for example in progress_iter:
+            votes = self._collect_votes_for_sample(score_instruction, example)
+            all_sample_votes.append(votes)
+
+        # --- Step 2: Analyze votes for each threshold ---
+        thresholds = self.config.consensus_thresholds or [0.67]
+        overall_metrics: Dict[str, float] = {}
+
+        for threshold in thresholds:
+            self.log(f"Analyzing collected votes with threshold: {threshold}")
+            actual_labels: List[int] = []
+            predicted_labels: List[int] = []
+            withdrawn = 0
+
+            for i, example in enumerate(dataset):
+                votes = all_sample_votes[i]
+                vote_counts = Counter(votes)
+
+                if not vote_counts:
+                    withdrawn += 1
+                    continue
+                
+                best_label, best_count = max(vote_counts.items(), key=lambda item: item[1])
+                agreement_ratio = best_count / self.consensus.runs
+
+                gold_label = int(example["label"])
+                if self.promptAugmenter.params.force_answer is not None:
+                    gold_label = self.forcedAnswerLabel
+
+                if agreement_ratio >= threshold:
+                    actual_labels.append(gold_label)
+                    predicted_labels.append(best_label)
+                else:
+                    withdrawn += 1
+            
+            # --- Calculate and log metrics for this threshold ---
+            if not predicted_labels:
+                metrics = self._empty_metrics()
+                label_counts = {}
+            else:
+                metrics = self._compute_metrics(actual_labels, predicted_labels, self.labelRange)
+                label_counts_by_id = Counter(predicted_labels)
+                label_counts = {
+                    self._label_names[idx]: count for idx, count in label_counts_by_id.items()
+                }
+
+            total_examples = len(dataset)
+            eligible_examples = total_examples # No skipped examples in this flow
+            withdraw_rate = withdrawn / eligible_examples if eligible_examples > 0 else float("nan")
+            metrics.update({
+                "total_examples": total_examples,
+                "eligible_examples": eligible_examples,
+                "graded_examples": len(predicted_labels),
+                "withdrawn_examples": withdrawn,
+                "withdraw_rate": withdraw_rate,
+                "skipped_examples": 0,
+            })
+            
+            # Temporarily set config label and threshold for logging
+            original_label = self.config.label
+            self.config.label = f"consensus_{threshold}"
+            self.consensus.agreement_threshold = threshold
+            self._log_summary(metrics, label_counts)
+            self.config.label = original_label # Restore original label
+
+            overall_metrics[f"accuracy_at_{threshold}"] = metrics["accuracy"]
+        
+        self.log("Finished analyzing all thresholds.")
+        return overall_metrics
+
+    def _collect_votes_for_sample(self, score_instruction: str, example: ABCMapping[str, object]) -> List[int]:
+        """Helper to collect multiple votes for a single sample."""
+        student_answer = self.promptAugmenter.run(example["student_answer"])
+        prompt = PromptExample(
+            instruction=example["question"],
+            reference_answer=example["reference_answer"],
+            student_answer=student_answer,
+            score_instruction=score_instruction,
+        ).to_prompt()
+
+        votes: List[int] = []
+        for _ in range(self.consensus.runs):
+            response = self.llm_client.generate(prompt)
+            raw_label = self._extract_label(response)
+            if raw_label is None:
+                continue
+            normalized = self._normalize_prediction(raw_label)
+            if normalized is None:
+                continue
+            votes.append(normalized)
+        return votes
+
+
+class SciEntsBankConsensusCurve3WayExperiment(SciEntsBankConsensusCurveExperiment):
+    """Efficient consensus curve experiment using the 3-way label scheme."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        consensus: ConsensusGradingConfig | None = None,
+        promptAugment: PromptAugmentationConfig
+    ) -> None:
+        super().__init__(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme="3way",
+            run_name=run_name,
+            config=config,
+            consensus=consensus,
+            promptAugment=promptAugment,
+        )
+
+
+class SciEntsBankConsensusCurve2WayExperiment(SciEntsBankConsensusCurveExperiment):
+    """Efficient consensus curve experiment using the 2-way label scheme."""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        logger_factory: ExperimentLoggerFactory,
+        *,
+        run_name: Optional[str] = None,
+        config: SciEntsBankExperimentConfig | None = None,
+        consensus: ConsensusGradingConfig | None = None,
+        promptAugment: PromptAugmentationConfig
+    ) -> None:
+        super().__init__(
+            llm_client=llm_client,
+            logger_factory=logger_factory,
+            label_scheme="2way",
+            run_name=run_name,
+            config=config,
+            consensus=consensus,
+            promptAugment=promptAugment,
+        )
 
 
 class SciEntsBankConsensus3WayExperiment(SciEntsBankConsensusExperiment):
