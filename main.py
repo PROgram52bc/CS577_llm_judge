@@ -5,6 +5,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+import os
 
 from llm_judge.experiments import CSVGradingConfig, CSVGradingExperiment
 from llm_judge.experiments.scientsbank_kappa import (
@@ -85,6 +86,25 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="",
         help="Optional descriptive label for the experiment run, to be included in the summary log.",
+    )
+
+    # Read RANDOM_SEED from environment variable to use as a default for the command-line arg.
+    default_seed = None
+    seed_from_env = os.getenv('RANDOM_SEED')
+    if seed_from_env is not None:
+        try:
+            default_seed = int(seed_from_env)
+        except ValueError:
+            print(
+                f"Warning: RANDOM_SEED environment variable ('{seed_from_env}') is not a valid integer. Ignoring.",
+                file=sys.stderr
+            )
+
+    parser.add_argument(
+        "--shuffle-seed",
+        type=int,
+        default=default_seed,
+        help="Seed for reproducible random shuffling. Defaults to the RANDOM_SEED environment variable if set.",
     )
     parser.add_argument(
         "--log-format",
@@ -274,6 +294,7 @@ def main() -> None:
         summary_log_file=args.summary_log_file,
         command_line_args=cmd_args_str,
         label=args.label,
+        shuffle_seed=args.shuffle_seed,
     )
     promptAug = PromptAugmentationConfig(
         force_answer = args.force_answer,

@@ -4,3 +4,6 @@
 
 export OPENAI_API_KEY="replace-with-openai-api-key"
 export RCAC_GENAI_API_KEY="replace-with-rcac-api-key"
+
+# The seed used for reproducible random sampling of the dataset.
+export RANDOM_SEED=42

@@ -36,6 +36,7 @@ class SciEntsBankExperimentConfig:
     summary_log_file: Optional[Path] = None
     command_line_args: str = ""
     label: str = ""
+    shuffle_seed: Optional[int] = None
 
     def __post_init__(self) -> None:
         if self.batch_size < 1:
@@ -517,11 +518,16 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         )
         dataset: Dataset = loader.load()
         dataset = self._apply_label_scheme(dataset)
+
+        # Shuffle the dataset before sampling if a seed is provided.
+        if self.config.shuffle_seed is not None:
+            dataset = dataset.shuffle(seed=self.config.shuffle_seed)
+            self.log(f"Shuffled dataset with random seed {self.config.shuffle_seed}.")
+
         if self.config.sample_size is not None and len(dataset) > self.config.sample_size:
             dataset = dataset.select(range(self.config.sample_size))
         self._log_label_distribution(dataset)
         return dataset
-
     def _apply_label_scheme(self, dataset: Dataset) -> Dataset:
         cache_path = self._cache_path()
         if cache_path and cache_path.exists():
