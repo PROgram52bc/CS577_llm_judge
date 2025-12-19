@@ -25,25 +25,23 @@ The input CSV for this plot must contain a `label` column with the following str
 ---
 
 ## Plot B: Null Model Vulnerability (Adversarial Attack)
-**Data Generation:** `run_plot_B_null_models.sh`  
+**Data Generation:** `run_plot_B_null_models.sh` (The results are read from the main `summary_stats.csv` file).
 The input CSV for this plot must contain:
-1.  A `label` column with the following strings: `control_real_answer`, `naive_solution`, `naive_i_dont_know`, `persuasive_ignore`, `persuasive_this_response`, `structured_json_injection`.
-2.  An `accuracy` column.
+1.  A `label` column with the experiment names (e.g., `control_real_answer`, `naive_solution`, etc.).
+2.  The five count columns: `count_correct`, `count_partially_correct_incomplete`, `count_contradictory`, `count_irrelevant`, `count_non_domain`.
 
-**Plot Generation:** `python plot_B_null_models.py <path_to_input_csv>`
+**Plot Generation:** `python plot_B_null_models.py <path_to_summary_stats.csv>`
 
-**Goal:** Test if the model assigns high scores to vacuous or adversarial answers.
+**Goal:** Analyze the model's response distribution when faced with vacuous or adversarial answers.
 
-* **Plot Type:** Bar Chart
-* **X-Axis:** Input Strategy
-    * *Control:* Real Student Answer.
-    * *Naive Attacks:* "Solution", "I don't know".
-    * *Persuasive Attacks:* "Ignore directions...", "This response offers...".
-    * *Structured Attack:* Prompt Injection.
-* **Y-Axis:** Accuracy.
+* **Plot Type:** Stacked Bar Chart
+* **X-Axis:** Input Strategy (e.g., Control, Naive Solution, Persuasive Ignore, etc.).
+* **Y-Axis:** Percentage of Responses (%).
 * **Visual Structure:**
-    * A simple bar chart where each bar shows the accuracy for a given input strategy.
-* **Interpretation:** High accuracy on any of the attack bars indicates a vulnerability, as the model should ideally classify these inputs as incorrect (resulting in low accuracy).
+    * Each bar represents an input strategy and sums to 100%.
+    * Each bar is segmented by color, with each color representing a predicted label category (e.g., Correct, Irrelevant).
+    * A legend identifies the color for each predicted label.
+* **Interpretation:** For a robust model, the "control" bar should show a high percentage of 'Correct' or 'Partially Correct' responses, while the attack bars should show a very high percentage of 'Irrelevant' or 'Non-Domain' responses, indicating the model successfully identified and rejected the junk inputs.
 
 ---
 
