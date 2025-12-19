@@ -54,9 +54,18 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
 
     # --- Plotting ---
     fig, ax = plt.subplots(figsize=(12, 7))
+
+    # Define an explicit mapping for more readable x-axis labels
+    display_name_mapping = {
+        'control_real_answer': 'Control (Real Answers)',
+        'naive_solution': 'Solution',
+        'naive_i_dont_know': 'Don\'t know',
+        'persuasive_ignore': 'Ignore',
+        'persuasive_this_response': 'Quality',
+        'structured_json_injection': 'Structured'
+    }
+    experiments_display_names = [display_name_mapping[label] for label in experiment_labels]
     
-    # Clean up the experiment labels for the x-axis
-    experiments_display_names = [name.replace('_', ' ').title() for name in experiment_labels]
     width = 0.6
     bottom = np.zeros(len(experiments_display_names))
 
