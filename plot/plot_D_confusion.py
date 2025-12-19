@@ -47,7 +47,7 @@ def plot_D_confusion(input_file, output_dir='plot/logs/plot_D_confusion'):
                 linewidths=.5, linecolor='black')
 
     # --- Aesthetics ---
-    ax.set_title('Plot D: Confusion Matrix (Error Analysis)', fontsize=16, weight='bold')
+
     ax.set_xlabel('Model Predicted Score', fontsize=12)
     ax.set_ylabel('Human Gold Label', fontsize=12)
     

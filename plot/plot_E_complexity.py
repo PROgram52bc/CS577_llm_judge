@@ -72,7 +72,7 @@ def plot_E_complexity(input_file, output_dir='plot/logs/plot_E_complexity'):
     ax1.legend(handles1 + handles2, labels1 + labels2,
                loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3, fontsize=10)
 
-    plt.title('Plot E: Performance vs. Label Scheme Complexity', fontsize=16, weight='bold')
+
     plt.tight_layout()
     fig.subplots_adjust(bottom=0.25)
 

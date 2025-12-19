@@ -80,7 +80,7 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
     ax1.legend(handles1 + handles2, labels1 + labels2,
                loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=10)
 
-    plt.title('Plot A: Robustness Drop Analysis', fontsize=16, weight='bold')
+
     plt.tight_layout()
     fig.subplots_adjust(bottom=0.3)
 

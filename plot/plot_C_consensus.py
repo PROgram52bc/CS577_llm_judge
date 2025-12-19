@@ -52,7 +52,7 @@ def plot_C_consensus(input_file, output_dir='plot/logs/plot_C_consensus'):
     cbar.set_label('Consensus Threshold', fontsize=12)
 
     # --- Aesthetics ---
-    ax.set_title('Plot C: The "Trust Curve" (Coverage vs. Accuracy)', fontsize=16, weight='bold')
+
     ax.set_xlabel('Coverage (%)', fontsize=12)
     ax.set_ylabel('Accuracy (on Graded Subset)', fontsize=12)
     ax.set_xlim(df_sorted['coverage'].min() - 5, 105)

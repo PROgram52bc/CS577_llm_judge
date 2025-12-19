@@ -75,7 +75,7 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
 
     # --- Aesthetics ---
     ax.set_ylabel('Percentage of Responses (%)')
-    ax.set_title('Plot B: Model Response Distribution vs. Adversarial Attacks', fontsize=16, weight='bold')
+
     ax.tick_params(axis='x', rotation=25)
     ax.set_ylim(0, 105) # Set Y-axis to go up to 100%
 
