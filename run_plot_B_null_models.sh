@@ -6,7 +6,7 @@ MODEL_NAME="qwen2.5:72b"
 SAMPLE_SIZE=40
 BATCH_SIZE=8
 LOG_DIR="logs/plot_B_null_models"
-LABEL_SCHEME="2way"
+LABEL_SCHEME="5way"
 
 # Attack Strings
 NAIVE_1="solution"
