@@ -1,7 +1,8 @@
 
+
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
 import argparse
 import os
 
@@ -9,8 +10,9 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
     """
     Generates Plot A: Robustness Drop (Sensitivity Analysis).
 
-    This plot is a vertical bar chart showing the degradation of grading reliability
-    (Cohen's Kappa or Accuracy) when the model faces noisy or imperfect input data.
+    This plot compares key performance metrics (Accuracy, Cohen's Kappa, Spearman Correlation)
+    across different data augmentations. It includes error bars (representing standard
+    deviation) if multiple data points for each augmentation type are present.
     """
     # Read the data
     df = pd.read_csv(input_file)
@@ -24,45 +26,63 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
         'baseline', 'ocr', 'typo', 'non_influential', 'hyphen',
         'non_unicode', 'synonym', 'paraphrase'
     ]
-    df = df[df['augmentation_type'].isin(allowed_labels)]
+    df_filtered = df[df['augmentation_type'].isin(allowed_labels)]
 
-    # Identify baseline
-    baseline_row = df[df['augmentation_type'] == 'baseline']
-    if baseline_row.empty:
-        raise ValueError("Could not find baseline data (label='baseline') within the filtered labels.")
+    # Group by augmentation type and calculate mean and standard deviation
+    grouped = df_filtered.groupby('augmentation_type')
+    metrics = ['accuracy', 'cohen_kappa', 'spearman_correlation']
+    means = grouped[metrics].mean()
+    stds = grouped[metrics].std().fillna(0)
 
-    baseline_accuracy = baseline_row['accuracy'].iloc[0]
+    # Order the results: baseline first, then alphabetically
+    ordered_labels = ['baseline'] + sorted([l for l in allowed_labels if l != 'baseline'])
+    means = means.loc[ordered_labels]
+    stds = stds.loc[ordered_labels]
 
-    # Sort data for plotting: Baseline first, then others alphabetically
-    df_baseline = df[df['augmentation_type'] == 'baseline']
-    df_augmentations = df[df['augmentation_type'] != 'baseline']
-    df_augmentations = df_augmentations.sort_values('augmentation_type')
-    df_sorted = pd.concat([df_baseline, df_augmentations])
-    
-    # --- Plotting ---
-    plt.style.use('seaborn-v0_8-whitegrid')
-    fig, ax = plt.subplots(figsize=(12, 7))
+    categories = [label.replace('_', ' ').title() for label in ordered_labels]
+    accuracy_mean = means['accuracy'].tolist()
+    kappa_mean = means['cohen_kappa'].tolist()
+    spearman_mean = means['spearman_correlation'].tolist()
 
-    # Bar chart
-    sns.barplot(x='augmentation_type', y='accuracy', data=df_sorted, ax=ax, palette='viridis', hue='augmentation_type', dodge=False)
+    accuracy_std = stds['accuracy'].tolist()
+    kappa_std = stds['cohen_kappa'].tolist()
+    spearman_std = stds['spearman_correlation'].tolist()
 
-    # Horizontal line for baseline
-    ax.axhline(y=baseline_accuracy, color='r', linestyle='--', linewidth=2, label=f'Baseline Accuracy ({baseline_accuracy:.2f})')
+    x = np.arange(len(categories))
+    fig, ax1 = plt.subplots(figsize=(12, 7))
 
-    # --- Aesthetics ---
-    ax.set_title('Plot A: Robustness Drop (Sensitivity Analysis)', fontsize=16, weight='bold')
-    ax.set_xlabel('Augmentation Type', fontsize=12)
-    ax.set_ylabel("Accuracy", fontsize=12)
-    ax.tick_params(axis='x', rotation=45)
-    
-    # Add a legend for the horizontal line
-    handles, labels = ax.get_legend_handles_labels()
-    # The ax.axhline adds a handle and label, which we can display.
-    # If you also want to keep the bar labels (if any), you would manage them here.
-    # For this plot, only the baseline horizontal line needs a label in the legend.
-    ax.legend(handles=[handles[0]], labels=[labels[0]], loc='best')
+    # --- Metric 1: Bars (Primary Y-Axis) ---
+    ax1.set_xlabel('Augmentation Type', fontsize=12)
+    ax1.set_ylabel('Accuracy', color='tab:blue', fontweight='bold', fontsize=12)
+    ax1.bar(x, accuracy_mean, yerr=accuracy_std, capsize=5,
+            color='lightblue', alpha=0.8, label='Accuracy', width=0.6,
+            ecolor='darkblue', zorder=3)
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.set_ylim(0, 1.1)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(categories, rotation=45, ha='right')
 
+    # --- Metrics 2 & 3: Lines/Markers (Secondary Y-Axis) ---
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Cohen's Kappa / Spearman Correlation", color='black', fontweight='bold', fontsize=12)
+
+    ax2.errorbar(x, kappa_mean, yerr=kappa_std, color='tab:red', marker='o',
+                 linewidth=2, label="Cohen's Kappa", markersize=8, capsize=5, zorder=2)
+
+    ax2.errorbar(x, spearman_mean, yerr=spearman_std, color='green', marker='D',
+                 linestyle='None', label='Spearman Correlation', markersize=8, capsize=5, zorder=1)
+
+    ax2.set_ylim(0, 1.1)
+
+    # --- Combined Legend ---
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(handles1 + handles2, labels1 + labels2,
+               loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=10)
+
+    plt.title('Plot A: Robustness Drop Analysis', fontsize=16, weight='bold')
     plt.tight_layout()
+    fig.subplots_adjust(bottom=0.3)
 
     # --- Save Output ---
     if not os.path.exists(output_dir):
@@ -73,7 +93,7 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Generate Plot A: Robustness Drop Analysis.")
-    parser.add_argument('input_file', type=str, help='Path to the input CSV file.')
+    parser.add_argument('input_file', type=str, help='Path to the consolidated input CSV file.')
     args = parser.parse_args()
     
     plot_A_robustness(args.input_file)

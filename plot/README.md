@@ -5,22 +5,21 @@ This document outlines the visualization strategy for the five experimental scri
 ---
 
 ## Plot A: Robustness Drop (Sensitivity Analysis)
-**Data Generation:** `run_plot_A_robustness.sh`  
-The input CSV for this plot must contain a `label` column with the following strings:
-`baseline`, `ocr`, `typo`, `non_influential`, `hyphen`, `non_unicode`, `synonym`, `paraphrase`.
+**Data Generation:** `run_plot_A_robustness.sh` (run multiple times to generate data for error margins).
+The input CSV for this plot is the main `summary_stats.csv` file.
 
-**Plot Generation:** `python plot_A_robustness.py <path_to_input_csv>`
+**Plot Generation:** `python plot_A_robustness.py <path_to_summary_stats.csv>`
 
-**Goal:** Quantify the degradation of grading reliability when the model faces noisy or imperfect input data.
+**Goal:** Quantify the degradation of grading reliability when the model faces noisy or imperfect input data, showing multiple performance metrics.
 
-* **Plot Type:** Vertical Bar Chart
-* **X-Axis:** Augmentation Type
-    * *Categories:* Baseline (Original), OCR Error, Typos, Non-Influential Words, Hyphens, Non-Unicode, Synonyms, Paraphrase.
-* **Y-Axis:** Accuracy.
+* **Plot Type:** Combined Bar and Line Chart (with dual Y-axes and error bars).
+* **X-Axis:** Augmentation Type (Baseline, OCR Error, Typos, etc.).
+* **Y-Axis (Primary):** Accuracy (plotted as bars with error bars).
+* **Y-Axis (Secondary):** Cohen's Kappa and Spearman Correlation (plotted as lines/markers with error bars).
 * **Visual Structure:**
-    * A simple bar chart where each bar represents the model's accuracy for a specific augmentation type.
-    * A **horizontal dashed line** extends from the Baseline bar across the chart. This provides a visual anchor to easily see the magnitude of the accuracy "drop" for each augmentation.
-* **Interpretation:** Significant drops below the baseline indicate the model is brittle and relies on surface-level tokens rather than semantic meaning.
+    * A multi-metric plot that shows the mean value for three key performance indicators across different data augmentations.
+    * Error bars (representing standard deviation) are shown for all three metrics, assuming multiple runs of data are provided.
+* **Interpretation:** Significant drops in the metrics below the baseline indicate the model is brittle and relies on surface-level tokens rather than semantic meaning. The plot also reveals if some metrics are more sensitive to noise than others.
 
 ---
 
