@@ -40,13 +40,16 @@ def plot_C_consensus(input_file, output_dir='plot/logs/plot_C_consensus'):
     plt.style.use('seaborn-v0_8-whitegrid')
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Line plot
-    ax.plot(df_sorted['coverage'], df_sorted['accuracy'], marker='o', linestyle='-', color='b')
+    # Scatter plot with color indicating consensus level
+    scatter = ax.scatter(df_sorted['coverage'], df_sorted['accuracy'], 
+                         c=df_sorted['consensus_threshold'], 
+                         cmap='viridis', 
+                         s=100, 
+                         zorder=5)
 
-    # Add markers for each threshold
-    for i, row in df_sorted.iterrows():
-        ax.text(row['coverage'], row['accuracy'] + 0.005, f"{row['consensus_threshold']:.1f}", 
-                ha='center', fontsize=9)
+    # Add a colorbar to serve as a legend for the consensus level
+    cbar = fig.colorbar(scatter, ax=ax)
+    cbar.set_label('Consensus Threshold', fontsize=12)
 
     # --- Aesthetics ---
     ax.set_title('Plot C: The "Trust Curve" (Coverage vs. Accuracy)', fontsize=16, weight='bold')
