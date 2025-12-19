@@ -206,6 +206,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 skipped, withdrawn = self._handle_outcome(
                     outcome,
                     example,
+                    student_answer,
                     index,
                     len(dataset),
                     label_lookup,
@@ -237,9 +238,12 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
                 for batch_idx, (batched_example, outcome) in enumerate(
                     zip(current_batch, outcomes)
                 ):
+                    # Re-run augmentation to get the answer that was used in the prompt
+                    student_answer_for_log = self.promptAugmenter.run(batched_example["student_answer"])
                     skipped, withdrawn = self._handle_outcome(
                         outcome,
                         batched_example,
+                        student_answer_for_log,
                         batch_indices[batch_idx],
                         len(dataset),
                         label_lookup,
@@ -260,8 +264,15 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
 
         if not predicted_labels:
             metrics = self._empty_metrics()
+            label_counts = {}
         else:
             metrics = self._compute_metrics(actual_labels, predicted_labels, self.labelRange)
+            # Count label occurrences by name
+            label_counts_by_id = Counter(predicted_labels)
+            label_counts = {
+                self._label_names[idx]: count for idx, count in label_counts_by_id.items()
+            }
+
         total_examples = len(dataset)
         eligible_examples = total_examples - skipped
         withdraw_rate = (
@@ -281,11 +292,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         for name, value in metrics.items():
             self.log(f"{name}: {value}")
 
-        self._log_summary(metrics)
+        self._log_summary(metrics, label_counts)
 
         return metrics
 
-    def _log_summary(self, metrics: Dict[str, float]) -> None:
+    def _log_summary(self, metrics: Dict[str, float], label_counts: Dict[str, int]) -> None:
         if not self.config.summary_log_file:
             return
 
@@ -314,6 +325,11 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "accuracy": metrics.get("accuracy"),
             "pearson_correlation": metrics.get("pearson_correlation"),
             "spearman_correlation": metrics.get("spearman_correlation"),
+            "count_correct": label_counts.get("correct", 0),
+            "count_partially_correct_incomplete": label_counts.get("partially_correct_incomplete", 0),
+            "count_contradictory": label_counts.get("contradictory", 0),
+            "count_irrelevant": label_counts.get("irrelevant", 0),
+            "count_non_domain": label_counts.get("non_domain", 0),
             "total_examples": metrics.get("total_examples"),
             "eligible_examples": metrics.get("eligible_examples"),
             "graded_examples": metrics.get("graded_examples"),
@@ -422,6 +438,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
         self,
         outcome: PredictionOutcome,
         example: ABCMapping[str, object],
+        augmented_student_answer: str,
         sample_index: int,
         total_samples: int,
         label_lookup: Callable[[int], str],
@@ -442,11 +459,9 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             withdrawn += 1
 
         gold_label = int(example["label"])
-        student_answer = example.get("student_answer")
+        # If a forced answer was used via the augmenter, the gold label needs to be adjusted accordingly.
         if self.promptAugmenter.params.force_answer is not None:
-            # Add expected label for forced answer
             gold_label = self.forcedAnswerLabel
-            student_answer = self.promptAugmenter.params.force_answer
 
         if outcome.predicted_label is not None and not outcome.withdrawn:
             actual_labels.append(gold_label)
@@ -459,7 +474,7 @@ class SciEntsBankKappaExperiment(Experiment[Dict[str, str]]):
             "id": example.get("id"),
             "question": example.get("question"),
             "reference_answer": example.get("reference_answer"),
-            "student_answer": student_answer,
+            "student_answer": augmented_student_answer,
             "gold_label_id": gold_label,
             "gold_label_name": label_lookup(gold_label),
             "withdrawn": outcome.withdrawn,
