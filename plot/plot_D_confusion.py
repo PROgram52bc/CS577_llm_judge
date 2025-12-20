@@ -29,13 +29,38 @@ def plot_D_confusion(input_file, output_dir='plot/logs/plot_D_confusion'):
     df_graded['gold_label_id'] = df_graded['gold_label_id'].astype(int)
     df_graded['predicted_label_id'] = df_graded['predicted_label_id'].astype(int)
 
-    # Define the full range of possible labels (e.g., 1-5)
-    min_label = min(df_graded['gold_label_id'].min(), df_graded['predicted_label_id'].min())
-    max_label = max(df_graded['gold_label_id'].max(), df_graded['predicted_label_id'].max())
-    labels = sorted(list(set(df_graded['gold_label_id']) | set(df_graded['predicted_label_id'])))
+    # Get unique label IDs and their corresponding names
+    unique_label_info = df_graded[['gold_label_id', 'gold_label_name']].drop_duplicates()
+
+    # Define the desired explicit order for the axes
+    desired_order = [
+        'correct', 
+        'partially_correct_incomplete', 
+        'contradictory', 
+        'irrelevant', 
+        'non_domain'
+    ]
+    
+    # Reorder the label info based on the desired order
+    # This ensures that any labels not in the data are excluded
+    unique_label_info = unique_label_info.set_index('gold_label_name').reindex(desired_order).dropna().reset_index()
+
+    # Extract sorted numeric IDs and create display names using an explicit mapping
+    numeric_labels = unique_label_info['gold_label_id'].tolist()
+    
+    label_display_mapping = {
+        'correct': 'Correct',
+        'partially_correct_incomplete': 'Partial',
+        'contradictory': 'Contradictory',
+        'irrelevant': 'Irrelevant',
+        'non_domain': 'Non-Domain'
+    }
+    
+    # Use the mapping, with a fallback to the original name if a label isn't in the map
+    display_labels = unique_label_info['gold_label_name'].map(label_display_mapping).fillna(unique_label_info['gold_label_name']).tolist()
 
     # Generate the confusion matrix
-    cm = confusion_matrix(df_graded['gold_label_id'], df_graded['predicted_label_id'], labels=labels)
+    cm = confusion_matrix(df_graded['gold_label_id'], df_graded['predicted_label_id'], labels=numeric_labels)
 
     # --- Plotting ---
     plt.style.use('seaborn-v0_8-whitegrid')
@@ -43,16 +68,17 @@ def plot_D_confusion(input_file, output_dir='plot/logs/plot_D_confusion'):
 
     # Create the heatmap
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, 
-                xticklabels=labels, yticklabels=labels,
+                xticklabels=display_labels, yticklabels=display_labels,
                 linewidths=.5, linecolor='black')
 
     # --- Aesthetics ---
 
     ax.set_xlabel('Model Predicted Score', fontsize=12)
     ax.set_ylabel('Human Gold Label', fontsize=12)
+    ax.tick_params(axis='x', rotation=20)
     
     # Annotations for interpretation
-    ax.text(0.5, 1.05, 'Diagonal (Correct), Upper-Triangle (Leniency), Lower-Triangle (Harshness)', 
+    ax.text(0.5, 1.05, 'Diagonal (Correct), Upper-Triangle (Harshness), Lower-Triangle (Leniency)', 
             transform=ax.transAxes, ha='center', fontsize=10, style='italic')
 
     plt.tight_layout()

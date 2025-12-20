@@ -27,8 +27,6 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
         'structured_json_injection'
     ]
     df = df[df['label'].isin(experiment_labels)]
-    df['label'] = pd.Categorical(df['label'], categories=experiment_labels, ordered=True)
-    df = df.sort_values('label')
 
     # Define the columns with the counts and their corresponding user-friendly names
     count_columns = [
@@ -38,13 +36,21 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
         'count_irrelevant',
         'count_non_domain'
     ]
+    
+    # Group by label and sum the counts to aggregate data from multiple runs
+    df_agg = df.groupby('label')[count_columns].sum().reset_index()
+    
+    # Ensure the order is correct for plotting
+    df_agg['label'] = pd.Categorical(df_agg['label'], categories=experiment_labels, ordered=True)
+    df_agg = df_agg.sort_values('label')
+
     plot_labels = ['Correct', 'Partially Correct', 'Contradictory', 'Irrelevant', 'Non-Domain']
     
     # Define colors for each label category
     colors = ['#2ca02c', '#1f77b4', '#ff7f0e', '#d62728', '#7f7f7f']
     
-    # Extract the count data and convert to percentages
-    counts = df[count_columns].values
+    # Extract the aggregated count data and convert to percentages
+    counts = df_agg[count_columns].values
     totals = counts.sum(axis=1)
     # Avoid division by zero if a row has no graded examples
     percentages = np.divide(counts, totals[:, np.newaxis], out=np.zeros_like(counts, dtype=float), where=totals[:, np.newaxis] != 0) * 100
@@ -58,13 +64,14 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
     # Define an explicit mapping for more readable x-axis labels
     display_name_mapping = {
         'control_real_answer': 'Control (Real Answers)',
-        'naive_solution': 'Solution',
-        'naive_i_dont_know': 'Don\'t know',
-        'persuasive_ignore': 'Ignore',
-        'persuasive_this_response': 'Quality',
-        'structured_json_injection': 'Structured'
+        'naive_solution': 'Naive "solution"',
+        'naive_i_dont_know': 'Naive "I don\'t know"',
+        'persuasive_ignore': 'Persuasive (Ignore)',
+        'persuasive_this_response': 'Persuasive (Quality Claim)',
+        'structured_json_injection': 'Structured Attack'
     }
-    experiments_display_names = [display_name_mapping[label] for label in experiment_labels]
+    # Use the sorted, aggregated labels to build the display names
+    experiments_display_names = [display_name_mapping[label] for label in df_agg['label']]
     
     width = 0.6
     bottom = np.zeros(len(experiments_display_names))
@@ -75,8 +82,7 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
 
     # --- Aesthetics ---
     ax.set_ylabel('Percentage of Responses (%)')
-
-    ax.tick_params(axis='x', rotation=25)
+    ax.tick_params(axis='x', rotation=20)
     ax.set_ylim(0, 105) # Set Y-axis to go up to 100%
 
     # Place legend outside to keep the chart clean
