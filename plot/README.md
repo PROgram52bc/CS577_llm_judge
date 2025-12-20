@@ -85,16 +85,16 @@ The input CSV for this plot must contain a `label` column where each label is a 
 ## Plot E: Label Scheme Complexity
 **Data Generation:** `run_plot_E_complexity.sh`
 
-**Plot Generation:** `python plot_E_complexity.py <path_to_input_csv>`
+**Plot Generation:** `python plot_E_complexity.py <path_to_summary_stats.csv>`
 
 **Goal:** Measure how classification complexity affects the model's alignment with expert judgment.
 
 * **Plot Type:** Combined Bar and Line Chart (with dual Y-axes).
 * **X-Axis:** Label Scheme (`2-Way`, `3-Way`, `5-Way`).
-* **Y-Axis (Primary):** Accuracy (plotted as bars).
-* **Y-Axis (Secondary):** Cohen's Kappa and Spearman Correlation (plotted as lines/markers).
+* **Y-Axis (Primary):** Accuracy (plotted as bars with error bars).
+* **Y-Axis (Secondary):** Cohen's Kappa (plotted as a line/marker with error bars).
 * **Visual Structure:**
     * Bars show the primary accuracy for each label scheme.
-    * Two overlaid lines with distinct markers show the trend for other agreement metrics across the different schemes.
+    * An overlaid line with distinct markers shows the trend for Cohen's Kappa across the different schemes.
 * **Interpretation:** Shows the performance degradation as the number of grading categories increases, quantifying the difficulty of more nuanced classification tasks.
 

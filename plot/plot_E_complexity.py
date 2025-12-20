@@ -23,17 +23,15 @@ def plot_E_complexity(input_file, output_dir='plot/logs/plot_E_complexity'):
 
     # Group by label scheme and calculate mean and standard deviation for each metric
     grouped = df_filtered.groupby('label')
-    means = grouped[['accuracy', 'cohen_kappa', 'spearman_correlation']].mean().loc[schemes]
-    stds = grouped[['accuracy', 'cohen_kappa', 'spearman_correlation']].std().loc[schemes].fillna(0) # Fill NaN with 0 if only one sample
+    means = grouped[['accuracy', 'cohen_kappa']].mean().loc[schemes]
+    stds = grouped[['accuracy', 'cohen_kappa']].std().loc[schemes].fillna(0) # Fill NaN with 0 if only one sample
 
     categories = ['2-Way Grading', '3-Way Grading', '5-Way Grading']
     accuracy_mean = means['accuracy'].tolist()
     kappa_mean = means['cohen_kappa'].tolist()
-    spearman_mean = means['spearman_correlation'].tolist()
 
     accuracy_std = stds['accuracy'].tolist()
     kappa_std = stds['cohen_kappa'].tolist()
-    spearman_std = stds['spearman_correlation'].tolist()
 
     x = np.arange(len(categories))
     fig, ax1 = plt.subplots(figsize=(10, 7))
@@ -52,26 +50,21 @@ def plot_E_complexity(input_file, output_dir='plot/logs/plot_E_complexity'):
 
     # --- Metrics 2 & 3: Lines/Markers (Secondary Y-Axis) ---
     ax2 = ax1.twinx()
-    ax2.set_ylabel("Cohen's Kappa / Spearman Correlation", color='black', fontweight='bold', fontsize=12)
+    ax2.set_ylabel("Cohen's Kappa", color='black', fontweight='bold', fontsize=12)
 
     # Metric 2: Cohen's Kappa (Line Plot with Error Bars)
     ax2.errorbar(x, kappa_mean, yerr=kappa_std, color='tab:red', marker='o',
                  linewidth=2, label="Cohen's Kappa", markersize=8, capsize=5, zorder=2) # Middle zorder for red
 
-    # Metric 3: Spearman Correlation (Scatter/Diamond Plot with Error Bars)
-    # Use errorbar with no line for a scatter-like plot
-    ax2.errorbar(x, spearman_mean, yerr=spearman_std, color='green', marker='D',
-                 linestyle='None', label='Spearman Correlation', markersize=8, capsize=5, zorder=1) # Lowest zorder for green
+    ax2.set_ylim(0, 1.1)
 
     # --- Combined Legend ---
     # Manually gather handles from both axes for a unified legend
-    # For errorbar, the handle is a container. We need to grab the main line/marker from it.
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
     
     ax1.legend(handles1 + handles2, labels1 + labels2,
-               loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3, fontsize=10)
-
+               loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2, fontsize=10)
 
     plt.tight_layout()
     fig.subplots_adjust(bottom=0.25)
