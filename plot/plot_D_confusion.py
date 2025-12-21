@@ -69,17 +69,18 @@ def plot_D_confusion(input_file, output_dir='plot/logs/plot_D_confusion'):
     # Create the heatmap
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, 
                 xticklabels=display_labels, yticklabels=display_labels,
-                linewidths=.5, linecolor='black')
+                linewidths=.5, linecolor='black', annot_kws={"fontsize": 15})
 
     # --- Aesthetics ---
 
-    ax.set_xlabel('Model Predicted Score', fontsize=12)
-    ax.set_ylabel('Human Gold Label', fontsize=12)
-    ax.tick_params(axis='x', rotation=20)
+    ax.set_xlabel('Model Predicted Score', fontsize=15)
+    ax.set_ylabel('Human Gold Label', fontsize=15)
+    ax.tick_params(axis='x', rotation=20, labelsize=15) # x-axis tick labels
+    ax.tick_params(axis='y', labelsize=15) # y-axis tick labels
     
     # Annotations for interpretation
     ax.text(0.5, 1.05, 'Diagonal (Correct), Upper-Triangle (Harshness), Lower-Triangle (Leniency)', 
-            transform=ax.transAxes, ha='center', fontsize=10, style='italic')
+            transform=ax.transAxes, ha='center', fontsize=15, style='italic')
 
     plt.tight_layout()
 

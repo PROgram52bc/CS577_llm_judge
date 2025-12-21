@@ -63,12 +63,12 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
 
     # Define an explicit mapping for more readable x-axis labels
     display_name_mapping = {
-        'control_real_answer': 'Control (Real Answers)',
-        'naive_solution': 'Naive "solution"',
-        'naive_i_dont_know': 'Naive "I don\'t know"',
-        'persuasive_ignore': 'Persuasive (Ignore)',
-        'persuasive_this_response': 'Persuasive (Quality Claim)',
-        'structured_json_injection': 'Structured Attack'
+        'control_real_answer': 'Baseline',
+        'naive_solution': '"solution"',
+        'naive_i_dont_know': '"I don\'t know"',
+        'persuasive_ignore': 'Ignore',
+        'persuasive_this_response': 'Quality Claim',
+        'structured_json_injection': 'Structured'
     }
     # Use the sorted, aggregated labels to build the display names
     experiments_display_names = [display_name_mapping[label] for label in df_agg['label']]
@@ -81,12 +81,13 @@ def plot_B_null_models(input_file, output_dir='plot/logs/plot_B_null_models'):
         bottom += data[i]
 
     # --- Aesthetics ---
-    ax.set_ylabel('Percentage of Responses (%)')
-    ax.tick_params(axis='x', rotation=20)
+    ax.set_ylabel('Percentage of Responses (%)', fontsize=15)
+    ax.tick_params(axis='x', rotation=20, labelsize=15)
+    ax.tick_params(axis='y', labelsize=15)
     ax.set_ylim(0, 105) # Set Y-axis to go up to 100%
 
     # Place legend outside to keep the chart clean
-    ax.legend(title="Predicted Label", bbox_to_anchor=(1.04, 1), loc='upper left')
+    ax.legend(title="Predicted Label", bbox_to_anchor=(1.04, 1), loc='upper left', fontsize=15, title_fontsize=15)
 
     plt.tight_layout()
     fig.subplots_adjust(right=0.75) # Adjust layout to make space for the legend

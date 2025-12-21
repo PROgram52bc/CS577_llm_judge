@@ -52,19 +52,19 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
     fig, ax1 = plt.subplots(figsize=(12, 7))
 
     # --- Metric 1: Bars (Primary Y-Axis) ---
-    ax1.set_xlabel('Augmentation Type', fontsize=12)
-    ax1.set_ylabel('Accuracy', color='tab:blue', fontweight='bold', fontsize=12)
+    ax1.set_xlabel('Augmentation Type', fontsize=15)
+    ax1.set_ylabel('Accuracy', color='tab:blue', fontweight='bold', fontsize=15)
     ax1.bar(x, accuracy_mean, yerr=accuracy_std, capsize=5,
             color='lightblue', alpha=0.8, label='Accuracy', width=0.6,
             ecolor='darkblue', zorder=3)
-    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=15)
     ax1.set_ylim(0, 1.1)
     ax1.set_xticks(x)
-    ax1.set_xticklabels(categories, rotation=45, ha='right')
+    ax1.set_xticklabels(categories, rotation=20, ha='right', fontsize=15)
 
     # --- Metrics 2 & 3: Lines/Markers (Secondary Y-Axis) ---
     ax2 = ax1.twinx()
-    ax2.set_ylabel("Cohen's Kappa / Spearman Correlation", color='black', fontweight='bold', fontsize=12)
+    ax2.set_ylabel("Cohen's Kappa / Spearman Correlation", color='black', fontweight='bold', fontsize=15)
 
     ax2.errorbar(x, kappa_mean, yerr=kappa_std, color='tab:red', marker='o',
                  linewidth=2, label="Cohen's Kappa", markersize=8, capsize=5, zorder=2)
@@ -73,12 +73,14 @@ def plot_A_robustness(input_file, output_dir='plot/logs/plot_A_robustness'):
                  linestyle='None', label='Spearman Correlation', markersize=8, capsize=5, zorder=1)
 
     ax2.set_ylim(0, 1.1)
+    ax2.tick_params(axis='y', labelsize=15)
+
 
     # --- Combined Legend ---
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(handles1 + handles2, labels1 + labels2,
-               loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=10)
+               loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=3, fontsize=15)
 
 
     plt.tight_layout()
