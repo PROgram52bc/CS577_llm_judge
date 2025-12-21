@@ -71,12 +71,20 @@ def plot_C_consensus(input_file, output_dir='plot/logs/plot_C_consensus'):
     ax.set_ylabel('Accuracy (on Graded Subset)', fontsize=15)
     ax.tick_params(axis='both', labelsize=15) # Set tick label size
     
+    # Add a legend for the marker shapes
     # Manually create handles for the legend to show only marker shapes, no color
     legend_handles = []
-    for scheme_key, style_info in marker_map.items():
+    
+    # Collect schemes that were actually plotted
+    plotted_schemes_in_order = [s for s in ['5way', '3way', '2way'] if s in df_consensus['label_scheme'].unique()]
+
+    for scheme_key in plotted_schemes_in_order:
+        style_info = marker_map[scheme_key]
         legend_handles.append(plt.Line2D([0], [0], marker=style_info['marker'], color='black', label=style_info['label'], linestyle='None', markersize=10))
     
-    ax.legend(handles=legend_handles, title="Label Scheme", framealpha=0, fontsize=15, title_fontsize=15)
+    # Only show the legend if there are handles to display
+    if legend_handles:
+        ax.legend(handles=legend_handles, title="Label Scheme", framealpha=0, fontsize=15, title_fontsize=15)
     
     # Add a colorbar for the consensus threshold, if we plotted anything
     if scatter_plot:
