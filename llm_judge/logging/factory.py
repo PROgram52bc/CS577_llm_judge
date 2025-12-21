@@ -1,15 +1,12 @@
 """Logging utilities for experiments."""
 from __future__ import annotations
 
-import atexit
 import csv
-import json
-import math
-from collections.abc import Mapping, Sequence
-from numbers import Real
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, List, Mapping, Sequence
+
+import numpy as np
 
 
 class ExperimentRunLogger:
@@ -107,9 +104,17 @@ class ExperimentRunLogger:
         ]
 
         parts: list[str] = []
-        for prefix, value in relevant:
-            formatted = ExperimentRunLogger._format_metric_value(value)
-            parts.append(f"{prefix}{formatted}")
+        for key, value in metrics.items():
+            if isinstance(value, float):
+                key_sanitized = key.replace('_', '')
+                
+                # Format float to be filename-safe: replace '.' with '_' and '-' with 'neg'
+                if np.isnan(value):
+                    val_sanitized = "nan"
+                else:
+                    val_sanitized = f"{value:.2f}".replace('.', '_').replace('-', 'neg')
+                
+                parts.append(f"{key_sanitized}{val_sanitized}")
         return "_".join(parts)
 
     @staticmethod

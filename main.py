@@ -260,6 +260,8 @@ def main() -> None:
     logger_factory = ExperimentLoggerFactory(args.log_dir, log_formats=args.log_formats)
     llm_client = build_llm_client(args)
     run_identifier = build_run_identifier(args)
+    if args.label:
+        run_identifier = f"{run_identifier}_{args.label}"
 
     if args.csv_input is not None:
         output_dir = args.csv_output_dir or args.log_dir
