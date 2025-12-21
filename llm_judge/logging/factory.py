@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, List, Mapping, Sequence
 
 import numpy as np
+import atexit
+import json
 
 
 class ExperimentRunLogger:
@@ -104,9 +106,17 @@ class ExperimentRunLogger:
         ]
 
         parts: list[str] = []
+        metric_key_short_names = {
+            'cohenkappa': 'kappa',
+            'accuracy': 'acc',
+            'pearsoncorrelation': 'ps',
+            'spearmancorrelation': 'sp',
+        }
         for key, value in metrics.items():
             if isinstance(value, float):
-                key_sanitized = key.replace('_', '')
+                # Sanitize the metric key (remove underscores first, then shorten)
+                key_cleaned = key.replace('_', '')
+                key_sanitized = metric_key_short_names.get(key_cleaned, key_cleaned)
                 
                 # Format float to be filename-safe: replace '.' with '_' and '-' with 'neg'
                 if np.isnan(value):
